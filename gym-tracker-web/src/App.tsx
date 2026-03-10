@@ -6,7 +6,7 @@ const MEU_USER_ID = "c0476249-0dfe-42f7-8c5f-9d6a09e8e4e2";
 function App() {
   const [activeTab, setActiveTab] = useState<'treinar' | 'historico'>('treinar');
   const [exerciseId, setExerciseId] = useState('1');
-  const [exercises, setExercises] = useState<any[]>([]);
+  //const [exercises, setExercises] = useState<any[]>([]);
   const [carga, setCarga] = useState('');
   const [reps, setReps] = useState('');
   const [status, setStatus] = useState('');
