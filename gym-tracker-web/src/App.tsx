@@ -13,7 +13,7 @@ function App() {
   const [evolutionData, setEvolutionData] = useState([]);
 
   // Busca a lista de exercícios cadastrados
-  const fetchExercises = async () => {
+  /*const fetchExercises = async () => {
     try {
       const response = await fetch('http://localhost:3000/exercises'); // Precisaremos criar essa rota no backend!
       if (response.ok) {
@@ -22,7 +22,7 @@ function App() {
       }
     } catch (e) { console.error("Erro ao carregar exercícios", e); }
   };
-
+*/
   const fetchEvolution = async () => {
     try {
       const response = await fetch(`http://localhost:3000/logs/evolution/${MEU_USER_ID}/${exerciseId}`);
@@ -38,7 +38,7 @@ function App() {
   };
 
   useEffect(() => { 
-    fetchExercises();
+    //fetchExercises();
     fetchEvolution(); 
   }, [exerciseId]);
 
