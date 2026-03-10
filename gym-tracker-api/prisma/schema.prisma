@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String        @id @default(uuid())
+  nome        String
+  email       String        @unique
+  altura      Float?        // Em metros
+  pesoAtual   Float?        // Em kg
+  createdAt   DateTime      @default(now())
+  
+  plans       WorkoutPlan[]
+  logs        WorkoutLog[]
+}
+
+model Exercise {
+  id            Int           @id @default(autoincrement())
+  nome          String
+  grupoMuscular String
+  equipamento   String?
+  
+  workoutItems  WorkoutItem[]
+  logs          WorkoutLog[]
+}
+
+model WorkoutPlan {
+  id        String        @id @default(uuid())
+  userId    String
+  nome      String
+  ativa     Boolean       @default(true)
+  
+  user      User          @relation(fields: [userId], references: [id])
+  items     WorkoutItem[]
+}
+
+model WorkoutItem {
+  id               String      @id @default(uuid())
+  planId           String
+  exerciseId       Int
+  series           Int
+  repeticoes       String      
+  descansoSegundos Int         
+  
+  plan             WorkoutPlan @relation(fields: [planId], references: [id])
+  exercise         Exercise    @relation(fields: [exerciseId], references: [id])
+}
+
+model WorkoutLog {
+  id         String   @id @default(uuid())
+  userId     String
+  exerciseId Int
+  data       DateTime @default(now())
+  carga      Float    
+  repsFeitas Int
+  
+  user       User     @relation(fields: [userId], references: [id])
+  exercise   Exercise @relation(fields: [exerciseId], references: [id])
+}
