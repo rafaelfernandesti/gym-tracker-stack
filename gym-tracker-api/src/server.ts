@@ -14,12 +14,12 @@ app.get('/ping', (req, res) => {
 
 // Rota para listar todos os exercícios
 app.get('/exercises', async (req, res) => {
-  try {
-    const exercises = await prisma.exercise.findMany();
-    res.json(exercises);
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao buscar exercícios.' });
-  }
+    try {
+        const exercises = await prisma.exercise.findMany();
+        res.json(exercises);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar exercícios.' });
+    }
 });
 
 app.post('/exercises', async (req, res) => {
@@ -112,7 +112,8 @@ app.get('/logs/evolution/:userId/:exerciseId', async (req, res) => {
         res.status(500).json({ error: 'Erro ao buscar o histórico de evolução.' });
     }
 });
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
