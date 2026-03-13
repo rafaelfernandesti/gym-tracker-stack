@@ -26,15 +26,23 @@ app.get('/exercises', async (req, res) => {
     }
 });
 
+// Nova rota de criação de exercício
 app.post('/exercises', async (req, res) => {
-    const { nome, grupoMuscular, equipamento } = req.body;
+    const { nome, grupoMuscular, equipamento, ficha } = req.body;
+
     try {
         const exercise = await prisma.exercise.create({
-            data: { nome, grupoMuscular, equipamento }
+            data: {
+                nome,
+                grupoMuscular: grupoMuscular || 'Geral',
+                equipamento: equipamento || 'Livre',
+                ficha: ficha || 'A' // <-- Salva a ficha recebida
+            }
         });
         res.status(201).json(exercise);
     } catch (error) {
-        res.status(500).json({ error: 'Erro ao cadastrar o exercício.' });
+        console.error("ERRO NO PRISMA:", error);
+        res.status(500).json({ error: 'Erro ao criar exercício.', detalhes: String(error) });
     }
 });
 

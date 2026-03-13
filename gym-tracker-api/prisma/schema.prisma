@@ -24,7 +24,7 @@ model Exercise {
   nome          String
   grupoMuscular String
   equipamento   String?
-  
+  ficha         String       @default("A")
   workoutItems  WorkoutItem[]
   logs          WorkoutLog[]
 }
