@@ -15,7 +15,7 @@ function App() {
   // Busca a lista de exercícios cadastrados
   /*const fetchExercises = async () => {
     try {
-      const response = await fetch('http://localhost:3000/exercises'); // Precisaremos criar essa rota no backend!
+      const response = await fetch('https://gym-tracker-api-yomc.onrender.com/exercises'); // Precisaremos criar essa rota no backend!
       if (response.ok) {
         const data = await response.json();
         setExercises(data);
@@ -25,7 +25,7 @@ function App() {
 */
   const fetchEvolution = async () => {
     try {
-      const response = await fetch(`http://localhost:3000/logs/evolution/${MEU_USER_ID}/${exerciseId}`);
+      const response = await fetch(`https://gym-tracker-api-yomc.onrender.com/logs/evolution/${MEU_USER_ID}/${exerciseId}`);
       if (response.ok) {
         const data = await response.json();
         const formattedData = data.map((log: any) => ({
@@ -46,7 +46,7 @@ function App() {
     e.preventDefault();
     setStatus('Salvando...');
     try {
-      const response = await fetch('http://localhost:3000/logs', {
+      const response = await fetch('https://gym-tracker-api-yomc.onrender.com/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
