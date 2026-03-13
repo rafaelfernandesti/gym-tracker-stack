@@ -143,6 +143,22 @@ app.post('/exercises', async (req, res) => {
     }
 });
 
+// Rota para deletar um registro de treino
+app.delete('/logs/:id', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        await prisma.workoutLog.delete({
+            where: { id: id }
+        });
+        res.json({ message: 'Treino excluído com sucesso' });
+    } catch (error) {
+        console.error("ERRO AO EXCLUIR TREINO:", error);
+        res.status(500).json({ error: 'Erro ao excluir o registro.' });
+    }
+});
+
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
