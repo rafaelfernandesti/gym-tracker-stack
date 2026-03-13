@@ -112,6 +112,25 @@ app.get('/logs/evolution/:userId/:exerciseId', async (req, res) => {
         res.status(500).json({ error: 'Erro ao buscar o histórico de evolução.' });
     }
 });
+// Rota para cadastrar um novo exercício
+app.post('/exercises', async (req, res) => {
+    const { nome, grupoMuscular, equipamento } = req.body;
+
+    try {
+        const exercise = await prisma.exercise.create({
+            data: {
+                nome,
+                grupoMuscular: grupoMuscular || 'Geral',
+                equipamento: equipamento || 'Livre'
+            }
+        });
+        res.status(201).json(exercise);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao criar exercício.' });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
