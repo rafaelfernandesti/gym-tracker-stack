@@ -113,6 +113,7 @@ app.get('/logs/evolution/:userId/:exerciseId', async (req, res) => {
                 data: 'asc'
             },
             select: {
+                id: true,
                 data: true,
                 carga: true,
                 repsFeitas: true
