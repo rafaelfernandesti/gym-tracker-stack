@@ -12,13 +12,17 @@ app.get('/ping', (req, res) => {
     res.json({ message: 'Gym Tracker API online e conectada ao banco!' });
 });
 
-// Rota para listar todos os exercícios
 app.get('/exercises', async (req, res) => {
     try {
         const exercises = await prisma.exercise.findMany();
         res.json(exercises);
     } catch (error) {
-        res.status(500).json({ error: 'Erro ao buscar exercícios.' });
+        console.error("ERRO NO PRISMA:", error);
+        // Agora vamos mandar o erro real para o Front-end ver
+        res.status(500).json({
+            error: 'Erro ao buscar exercícios.',
+            detalhes: String(error)
+        });
     }
 });
 
