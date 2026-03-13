@@ -159,7 +159,26 @@ app.delete('/logs/:id', async (req, res) => {
     }
 });
 
+// Rota para editar um exercício existente
+app.put('/exercises/:id', async (req, res) => {
+    const { id } = req.params;
+    const { nome, grupoMuscular, ficha } = req.body;
 
+    try {
+        const exercise = await prisma.exercise.update({
+            where: { id: Number(id) },
+            data: {
+                nome,
+                grupoMuscular,
+                ficha
+            }
+        });
+        res.json(exercise);
+    } catch (error) {
+        console.error("ERRO AO ATUALIZAR EXERCÍCIO:", error);
+        res.status(500).json({ error: 'Erro ao atualizar o exercício.' });
+    }
+});
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
