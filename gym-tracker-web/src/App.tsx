@@ -167,7 +167,7 @@ function App() {
                   <YAxis stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} width={30} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px' }}
-                    formatter={(value: any, name: string) => [value + ' kg', name === 'carga' ? 'Carga' : name]}
+                    formatter={(value: any, name: any) => [value + ' kg', name === 'carga' ? 'Carga' : name]}
                     labelStyle={{ color: '#9CA3AF', marginBottom: '4px' }}
                   />
                   <Line type="monotone" dataKey="carga" stroke="#3B82F6" strokeWidth={4} dot={{ r: 5, fill: '#3B82F6', strokeWidth: 0 }} activeDot={{ r: 8 }} />
