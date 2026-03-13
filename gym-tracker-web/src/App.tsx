@@ -17,10 +17,14 @@ function App() {
   const [status, setStatus] = useState('');
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
 
+  // Estados do Cadastro/Edição de Exercícios
   const [novoNome, setNovoNome] = useState('');
   const [novoGrupo, setNovoGrupo] = useState('Peito');
   const [novaFicha, setNovaFicha] = useState('A'); 
   const [statusExercicio, setStatusExercicio] = useState('');
+  
+  // Controle de Edição
+  const [editingExId, setEditingExId] = useState<number | null>(null);
 
   const fetchExercises = async () => {
     try {
@@ -86,6 +90,15 @@ function App() {
     } catch (error) { setStatus('Erro de conexão.'); }
   };
 
+  const handleExcluirTreino = async (logId: string) => {
+    if (!confirm('Tem certeza que deseja apagar este registro?')) return;
+    try {
+      const response = await fetch(`${API_URL}/logs/${logId}`, { method: 'DELETE' });
+      if (response.ok) fetchEvolution();
+      else alert('Erro ao excluir o treino.');
+    } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
+  };
+
   const handleCriarExercicio = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusExercicio('Salvando...');
@@ -98,32 +111,45 @@ function App() {
 
       if (response.ok) {
         setStatusExercicio('Exercício adicionado! 🏋️‍♂️');
-        setNovoNome('');
+        limparFormularioExercicio();
         fetchExercises(); 
         setTimeout(() => setStatusExercicio(''), 3000);
       }
     } catch (error) { setStatusExercicio('Erro ao salvar.'); }
   };
 
-  // Nova função para excluir o treino
-  const handleExcluirTreino = async (logId: string) => {
-    if (!confirm('Tem certeza que deseja apagar este registro?')) return;
-    
+  const handleAtualizarExercicio = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusExercicio('Atualizando...');
     try {
-      const response = await fetch(`${API_URL}/logs/${logId}`, {
-        method: 'DELETE',
+      const response = await fetch(`${API_URL}/exercises/${editingExId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: novoNome, grupoMuscular: novoGrupo, ficha: novaFicha }),
       });
 
       if (response.ok) {
-        // Atualiza a tela puxando os dados do banco novamente
-        fetchEvolution();
-      } else {
-        alert('Erro ao excluir o treino.');
+        setStatusExercicio('Exercício atualizado! ✅');
+        limparFormularioExercicio();
+        fetchExercises(); 
+        setTimeout(() => setStatusExercicio(''), 3000);
       }
-    } catch (error) {
-      console.error(error);
-      alert('Erro de conexão ao tentar excluir.');
-    }
+    } catch (error) { setStatusExercicio('Erro ao atualizar.'); }
+  };
+
+  const iniciarEdicao = (ex: any) => {
+    setEditingExId(ex.id);
+    setNovoNome(ex.nome);
+    setNovoGrupo(ex.grupoMuscular || 'Peito');
+    setNovaFicha(ex.ficha || 'A');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const limparFormularioExercicio = () => {
+    setEditingExId(null);
+    setNovoNome('');
+    setNovoGrupo('Peito');
+    setNovaFicha('A');
   };
 
   const cargaMaxima = evolutionData.length > 0 ? Math.max(...evolutionData.map(d => d.carga)) : 0;
@@ -138,7 +164,7 @@ function App() {
       <div className="max-w-md mx-auto flex bg-gray-800 rounded-lg p-1 mb-6 text-sm font-medium">
         <button onClick={() => setActiveTab('treinar')} className={`flex-1 py-2 rounded-md transition-all ${activeTab === 'treinar' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Treinar</button>
         <button onClick={() => setActiveTab('historico')} className={`flex-1 py-2 rounded-md transition-all ${activeTab === 'historico' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Evolução</button>
-        <button onClick={() => setActiveTab('exercicios')} className={`flex-1 py-2 rounded-md transition-all ${activeTab === 'exercicios' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Novo Ex.</button>
+        <button onClick={() => setActiveTab('exercicios')} className={`flex-1 py-2 rounded-md transition-all ${activeTab === 'exercicios' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Gerenciar Ex.</button>
       </div>
 
       <main className="max-w-md mx-auto">
@@ -223,7 +249,6 @@ function App() {
               </ResponsiveContainer>
             </div>
 
-            {/* Nova seção de Histórico Detalhado */}
             {evolutionData.length > 0 && (
               <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
                 <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Registros Recentes</h3>
@@ -234,12 +259,7 @@ function App() {
                         <p className="text-sm font-bold text-white">{log.carga} kg <span className="text-gray-400 font-normal">x {log.repsFeitas} reps</span></p>
                         <p className="text-xs text-gray-500">{log.dataFormatada}</p>
                       </div>
-                      <button 
-                        onClick={() => handleExcluirTreino(log.id)}
-                        className="text-red-400 hover:text-red-300 p-2 text-sm font-bold"
-                      >
-                        ✕
-                      </button>
+                      <button onClick={() => handleExcluirTreino(log.id)} className="text-red-400 hover:text-red-300 p-2 text-sm font-bold">✕</button>
                     </div>
                   ))}
                 </div>
@@ -249,37 +269,73 @@ function App() {
         )}
 
         {activeTab === 'exercicios' && (
-          <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 animate-in fade-in">
-             <h3 className="text-gray-400 text-sm mb-4 uppercase font-bold">Cadastrar Novo Exercício</h3>
-             <form onSubmit={handleCriarExercicio} className="space-y-5">
-              <div>
-                <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Nome</label>
-                <input type="text" required value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Ex: Leg Press 45" className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-6 animate-in fade-in">
+            {/* Formulário de Cadastro e Edição */}
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
+              <h3 className="text-gray-400 text-sm mb-4 uppercase font-bold">
+                {editingExId ? 'Editar Exercício' : 'Cadastrar Novo Exercício'}
+              </h3>
+              <form onSubmit={editingExId ? handleAtualizarExercicio : handleCriarExercicio} className="space-y-5">
                 <div>
-                  <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Ficha</label>
-                  <select value={novaFicha} onChange={(e) => setNovaFicha(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="A">A</option>
-                    <option value="B">B</option>
-                    <option value="C">C</option>
-                  </select>
+                  <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Nome</label>
+                  <input type="text" required value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Ex: Leg Press 45" className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Grupo</label>
-                  <select value={novoGrupo} onChange={(e) => setNovoGrupo(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="Peito">Peito</option>
-                    <option value="Costas">Costas</option>
-                    <option value="Pernas">Pernas</option>
-                    <option value="Ombros">Ombros</option>
-                    <option value="Braços">Braços</option>
-                    <option value="Core">Core</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Ficha</label>
+                    <select value={novaFicha} onChange={(e) => setNovaFicha(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="A">A</option>
+                      <option value="B">B</option>
+                      <option value="C">C</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Grupo</label>
+                    <select value={novoGrupo} onChange={(e) => setNovoGrupo(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="Peito">Peito</option>
+                      <option value="Costas">Costas</option>
+                      <option value="Pernas">Pernas</option>
+                      <option value="Ombros">Ombros</option>
+                      <option value="Braços">Braços</option>
+                      <option value="Core">Core</option>
+                    </select>
+                  </div>
                 </div>
+                <div className="flex gap-2">
+                  <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all">
+                    {editingExId ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR'}
+                  </button>
+                  {editingExId && (
+                    <button type="button" onClick={limparFormularioExercicio} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-xl transition-all">
+                      CANCELAR
+                    </button>
+                  )}
+                </div>
+              </form>
+              {statusExercicio && <div className="mt-4 text-center text-green-400 font-medium">{statusExercicio}</div>}
+            </div>
+
+            {/* Lista de Exercícios Cadastrados */}
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
+              <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Meus Exercícios</h3>
+              <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                {exercises.map((ex) => (
+                  <div key={ex.id} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700">
+                    <div>
+                      <p className="text-sm font-bold text-white">{ex.nome}</p>
+                      <p className="text-xs text-gray-500">Ficha {ex.ficha || 'A'} • {ex.grupoMuscular}</p>
+                    </div>
+                    <button 
+                      onClick={() => iniciarEdicao(ex)}
+                      className="text-blue-400 hover:text-blue-300 p-2 text-xs font-bold uppercase tracking-wider"
+                    >
+                      Editar
+                    </button>
+                  </div>
+                ))}
               </div>
-              <button type="submit" className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 rounded-xl transition-all">CADASTRAR</button>
-            </form>
-            {statusExercicio && <div className="mt-4 text-center text-green-400 font-medium">{statusExercicio}</div>}
+            </div>
+
           </div>
         )}
       </main>
