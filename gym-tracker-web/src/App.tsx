@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const API_URL = "https://gym-tracker-api-yomc.onrender.com"; 
+const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
 function App() {
   // === ESTADOS DE AUTENTICAÇÃO ===
-  const [user, setUser] = useState<{id: string, nome: string, email: string} | null>(null);
+  const [user, setUser] = useState<{ id: string, nome: string, email: string } | null>(null);
   const [isLoginModo, setIsLoginModo] = useState(true);
   const [authEmail, setAuthEmail] = useState('');
   const [authSenha, setAuthSenha] = useState('');
@@ -17,7 +17,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'treinar' | 'historico' | 'exercicios'>('treinar');
   const [exerciseId, setExerciseId] = useState('');
   const [exercises, setExercises] = useState<any[]>([]);
-  
+
   const [fichaAtiva, setFichaAtiva] = useState('A');
   const exerciciosFiltrados = exercises.filter(ex => (ex.ficha || 'A') === fichaAtiva);
 
@@ -28,16 +28,17 @@ function App() {
 
   const [novoNome, setNovoNome] = useState('');
   const [novoGrupo, setNovoGrupo] = useState('Peito');
-  const [novaFicha, setNovaFicha] = useState('A'); 
+  const [novaFicha, setNovaFicha] = useState('A');
   const [statusExercicio, setStatusExercicio] = useState('');
   const [editingExId, setEditingExId] = useState<number | null>(null);
+
+  // Novo Estado: Filtro de Grupo Muscular na lista
+  const [filtroGrupoEx, setFiltroGrupoEx] = useState('Todos');
 
   const [tempoDescanso, setTempoDescanso] = useState(90);
   const [timerAtivo, setTimerAtivo] = useState(false);
 
   // === EFEITOS ===
-  
-  // 1. Verifica se já existe um usuário logado salvo no celular
   useEffect(() => {
     const usuarioSalvo = localStorage.getItem('@GymTracker:user');
     if (usuarioSalvo) {
@@ -45,7 +46,6 @@ function App() {
     }
   }, []);
 
-  // 2. Cronômetro
   useEffect(() => {
     let intervalo: ReturnType<typeof setInterval>;
     if (timerAtivo && tempoDescanso > 0) {
@@ -56,12 +56,9 @@ function App() {
     return () => clearInterval(intervalo);
   }, [timerAtivo, tempoDescanso]);
 
-  // 3. Carregar dados quando o usuário logar
-  useEffect(() => { 
-    if (user) fetchExercises(); 
-  }, [user]);
-  
-  useEffect(() => { 
+  useEffect(() => { if (user) fetchExercises(); }, [user]);
+
+  useEffect(() => {
     if (exerciciosFiltrados.length > 0) {
       setExerciseId(exerciciosFiltrados[0].id.toString());
     } else {
@@ -70,9 +67,7 @@ function App() {
     }
   }, [fichaAtiva, exercises]);
 
-  useEffect(() => { 
-    if (user && exerciseId) fetchEvolution(); 
-  }, [exerciseId, user]);
+  useEffect(() => { if (user && exerciseId) fetchEvolution(); }, [exerciseId, user]);
 
   // === FUNÇÕES DE AUTENTICAÇÃO ===
   const handleAuth = async (e: React.FormEvent) => {
@@ -94,7 +89,7 @@ function App() {
 
       if (response.ok) {
         setUser(data);
-        localStorage.setItem('@GymTracker:user', JSON.stringify(data)); // Salva a sessão
+        localStorage.setItem('@GymTracker:user', JSON.stringify(data));
         setAuthEmail(''); setAuthSenha(''); setAuthNome('');
       } else {
         setAuthErro(data.error || 'Erro na autenticação.');
@@ -123,14 +118,13 @@ function App() {
   const fetchEvolution = async () => {
     if (!exerciseId || !user) return;
     try {
-      // Agora usamos o ID dinâmico do usuário logado
       const response = await fetch(`${API_URL}/logs/evolution/${user.id}/${exerciseId}`);
       if (response.ok) {
         const data = await response.json();
         const formattedData = data.map((log: any) => ({
           ...log,
           dataFormatada: new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(log.data)),
-          volume: log.carga * log.repsFeitas 
+          volume: log.carga * log.repsFeitas
         }));
         setEvolutionData(formattedData);
       }
@@ -146,7 +140,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: user.id, // Usa o ID do usuário real
+          userId: user.id,
           exerciseId: Number(exerciseId),
           carga: Number(carga),
           repsFeitas: Number(reps),
@@ -186,7 +180,7 @@ function App() {
       if (response.ok) {
         setStatusExercicio('Exercício adicionado! 🏋️‍♂️');
         limparFormularioExercicio();
-        fetchExercises(); 
+        fetchExercises();
         setTimeout(() => setStatusExercicio(''), 3000);
       }
     } catch (error) { setStatusExercicio('Erro ao salvar.'); }
@@ -204,7 +198,7 @@ function App() {
       if (response.ok) {
         setStatusExercicio('Exercício atualizado! ✅');
         limparFormularioExercicio();
-        fetchExercises(); 
+        fetchExercises();
         setTimeout(() => setStatusExercicio(''), 3000);
       }
     } catch (error) { setStatusExercicio('Erro ao atualizar.'); }
@@ -216,7 +210,7 @@ function App() {
       const response = await fetch(`${API_URL}/exercises/${exId}`, { method: 'DELETE' });
       if (response.ok) {
         fetchExercises();
-        if (exerciseId === exId.toString()) setExerciseId(''); 
+        if (exerciseId === exId.toString()) setExerciseId('');
       } else { alert('Erro ao excluir o exercício.'); }
     } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
   };
@@ -239,7 +233,12 @@ function App() {
   const cargaMaxima = evolutionData.length > 0 ? Math.max(...evolutionData.map(d => d.carga)) : 0;
   const volumeMaximo = evolutionData.length > 0 ? Math.max(...evolutionData.map(d => d.volume)) : 0;
 
-  // === RENDERIZAÇÃO DA TELA DE LOGIN ===
+  // Filtro da lista de exercícios por grupo
+  const gruposMuscularesLista = ['Todos', 'Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'];
+  const exerciciosExibidos = filtroGrupoEx === 'Todos'
+    ? exercises
+    : exercises.filter(ex => ex.grupoMuscular === filtroGrupoEx);
+
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col justify-center items-center p-4 font-sans text-white">
@@ -264,9 +263,9 @@ function App() {
               <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Senha</label>
               <input type="password" required value={authSenha} onChange={(e) => setAuthSenha(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
             </div>
-            
+
             {authErro && <p className="text-red-400 text-sm text-center font-medium">{authErro}</p>}
-            
+
             <button type="submit" disabled={authLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50 mt-2">
               {authLoading ? 'AGUARDE...' : (isLoginModo ? 'ENTRAR' : 'CADASTRAR')}
             </button>
@@ -282,7 +281,6 @@ function App() {
     );
   }
 
-  // === RENDERIZAÇÃO DO APLICATIVO PRINCIPAL ===
   const formatarTempo = (segundos: number) => {
     const m = Math.floor(segundos / 60).toString().padStart(2, '0');
     const s = (segundos % 60).toString().padStart(2, '0');
@@ -373,14 +371,14 @@ function App() {
 
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 h-80">
               <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-gray-300 text-sm uppercase font-bold">Progressão</h3>
-                 <select value={exerciseId} onChange={(e) => setExerciseId(e.target.value)} className="bg-gray-900 text-xs border border-gray-700 rounded-lg p-2 text-white outline-none max-w-[150px]">
-                    {exercises.map(ex => (
-                      <option key={ex.id} value={ex.id}>{ex.nome} ({ex.ficha || 'A'})</option>
-                    ))}
-                 </select>
+                <h3 className="text-gray-300 text-sm uppercase font-bold">Progressão</h3>
+                <select value={exerciseId} onChange={(e) => setExerciseId(e.target.value)} className="bg-gray-900 text-xs border border-gray-700 rounded-lg p-2 text-white outline-none max-w-[150px]">
+                  {exercises.map(ex => (
+                    <option key={ex.id} value={ex.id}>{ex.nome} ({ex.ficha || 'A'})</option>
+                  ))}
+                </select>
               </div>
-              
+
               <ResponsiveContainer width="100%" height="85%">
                 <LineChart data={evolutionData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
@@ -452,19 +450,36 @@ function App() {
 
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
               <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Meus Exercícios</h3>
-              <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-                {exercises.map((ex) => (
-                  <div key={ex.id} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700">
-                    <div>
-                      <p className="text-sm font-bold text-white">{ex.nome}</p>
-                      <p className="text-xs text-gray-500">Ficha {ex.ficha || 'A'} • {ex.grupoMuscular}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => iniciarEdicao(ex)} className="text-blue-400 hover:text-blue-300 p-2 text-xs font-bold uppercase tracking-wider">Editar</button>
-                      <button onClick={() => handleExcluirExercicio(ex.id, ex.nome)} className="text-red-400 hover:text-red-300 p-2 text-xs font-bold uppercase tracking-wider">Excluir</button>
-                    </div>
-                  </div>
+
+              <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide">
+                {gruposMuscularesLista.map(grupo => (
+                  <button
+                    key={grupo}
+                    onClick={() => setFiltroGrupoEx(grupo)}
+                    className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all border ${filtroGrupoEx === grupo ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-400'}`}
+                  >
+                    {grupo}
+                  </button>
                 ))}
+              </div>
+
+              <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                {exerciciosExibidos.length > 0 ? (
+                  exerciciosExibidos.map((ex) => (
+                    <div key={ex.id} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700">
+                      <div>
+                        <p className="text-sm font-bold text-white">{ex.nome}</p>
+                        <p className="text-xs text-gray-500">Ficha {ex.ficha || 'A'} • {ex.grupoMuscular}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => iniciarEdicao(ex)} className="text-blue-400 hover:text-blue-300 p-2 text-xs font-bold uppercase tracking-wider">Editar</button>
+                        <button onClick={() => handleExcluirExercicio(ex.id, ex.nome)} className="text-red-400 hover:text-red-300 p-2 text-xs font-bold uppercase tracking-wider">Excluir</button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-sm text-center py-4">Nenhum exercício neste grupo.</p>
+                )}
               </div>
             </div>
           </div>
