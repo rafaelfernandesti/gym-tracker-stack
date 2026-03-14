@@ -4,7 +4,7 @@ import { toBlob } from 'html-to-image';
 
 const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
-// Componente do Modal do Relatório (O "Printável")
+// Componente do Modal do Relatório (O "Printável") - Versão com Mapa Muscular
 function ReportModal({ sessionData, onClose, onShare }: { sessionData: any, onClose: () => void, onShare: () => void }) {
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -14,54 +14,91 @@ function ReportModal({ sessionData, onClose, onShare }: { sessionData: any, onCl
   const endTime = new Date(sessionData.endTime);
   const durationMin = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
 
-  // Agrupa os logs por exercício
+  // Agrupa os logs por exercício (necessário para calcular Melhor Carga)
   const exercisesMap: any = {};
+  const musculosTrabalhados = new Set<string>(); // Usa Set para não repetir nomes
+
   sessionData.logs.forEach((log: any) => {
     const exNome = log.exercise.nome;
+    const grupo = log.exercise.grupoMuscular; // Pega o grupo
+
     if (!exercisesMap[exNome]) exercisesMap[exNome] = [];
     exercisesMap[exNome].push(log);
+
+    if (grupo) musculosTrabalhados.add(grupo); // Adiciona grupo na lista
   });
 
   const dataFormatada = startTime.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
   const horaInicio = startTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
+  // Lista de músculos para exibir em texto
+  const listaMusculos = Array.from(musculosTrabalhados).join(', ');
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in overflow-y-auto scrollbar-hide">
+
       {/* Área que será printada */}
       <div ref={reportRef} id="report-card" className="w-full max-w-sm bg-gray-950 p-6 rounded-3xl border-4 border-blue-600 shadow-2xl text-white font-sans">
-        <header className="text-center mb-6 border-b border-gray-800 pb-4">
+
+        <header className="text-center mb-6 border-b border-gray-800 pb-4 relative">
           <h1 className="text-2xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
           <p className="text-xs text-gray-400 uppercase font-bold tracking-widest mt-1">Resumo de Conquista</p>
         </header>
 
-        <div className="space-y-4 mb-6">
-          <div className="text-center">
-            <p className="text-sm font-medium text-gray-300 capitalize">{dataFormatada}</p>
-            <p className="text-xs text-gray-500">Início: {horaInicio}</p>
-          </div>
+        {/* Informações Principais */}
+        <div className="text-center mb-6">
+          <p className="text-sm font-medium text-gray-300 capitalize">{dataFormatada}</p>
+          <p className="text-xs text-gray-500">Início: {horaInicio}</p>
+        </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-gray-800 p-4 rounded-xl text-center border border-gray-700">
-              <p className="text-gray-500 text-xs font-bold uppercase">Duração</p>
-              <p className="text-2xl font-black text-white">{durationMin}<span className="text-sm text-gray-400"> min</span></p>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-xl text-center border border-gray-700">
-              <p className="text-gray-500 text-xs font-bold uppercase">Queima Est.</p>
-              <p className="text-2xl font-black text-green-400">{sessionData.calories || 0}<span className="text-sm text-gray-400"> kcal</span></p>
+        {/* Métricas Principais */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="bg-gray-800 p-4 rounded-xl text-center border border-gray-700">
+            <p className="text-gray-500 text-xs font-bold uppercase">Duração</p>
+            <p className="text-2xl font-black text-white">{durationMin}<span className="text-sm text-gray-400"> min</span></p>
+          </div>
+          <div className="bg-gray-800 p-4 rounded-xl text-center border border-gray-700">
+            <p className="text-gray-500 text-xs font-bold uppercase">Queima Est.</p>
+            <p className="text-2xl font-black text-green-400">{sessionData.calories || 0}<span className="text-sm text-gray-400"> kcal</span></p>
+          </div>
+        </div>
+
+        {/* === NOVA SEÇÃO: MAPA MUSCULAR === */}
+        <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl mb-6 relative overflow-hidden">
+          <div className="flex items-center gap-4">
+            {/* Imagem estática do corpo humano */}
+            <img
+              src="https://raw.githubusercontent.com/TiagoGouvea/muscle-map-image/main/muscle-map-front-back.png"
+              alt="Mapa Muscular"
+              className="w-16 h-auto opacity-70"
+            />
+
+            {/* Texto com os grupos trabalhados */}
+            <div className="flex-1">
+              <h3 className="text-gray-300 text-xs font-bold uppercase tracking-wider mb-2">Foco Muscular</h3>
+              <p className="text-sm text-white font-medium">
+                {listaMusculos || 'Músculos não registrados'}
+              </p>
             </div>
           </div>
         </div>
 
-        <div className="space-y-4 max-h-60 overflow-y-auto pr-2 scrollbar-hide mb-6 border-t border-gray-800 pt-4">
-          <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Exercícios Realizados</h3>
-          {Object.keys(exercisesMap).map(exNome => (
-            <div key={exNome} className="bg-gray-900/50 p-3 rounded-lg border border-gray-800">
-              <p className="text-sm font-bold text-white mb-1">{exNome}</p>
-              <p className="text-xs text-gray-400">
-                {exercisesMap[exNome].length} séries • Melhor carga: {Math.max(...exercisesMap[exNome].map((l: any) => l.carga))} kg
-              </p>
-            </div>
-          ))}
+        {/* Seção de Exercícios (Compactada) */}
+        <div className="space-y-3 mb-6 border-t border-gray-800 pt-4">
+          <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Detalhamento</h3>
+          {Object.keys(exercisesMap).map(exNome => {
+            const series = exercisesMap[exNome];
+            const melhorCarga = Math.max(...series.map((l: any) => l.carga));
+            return (
+              <div key={exNome} className="flex justify-between items-center bg-gray-900/50 p-3 rounded-lg border border-gray-800">
+                <p className="text-sm font-bold text-white flex-1 truncate pr-2">{exNome}</p>
+                <div className="text-right whitespace-nowrap">
+                  <p className="text-sm font-bold text-white">{melhorCarga} kg <span className="text-xs text-gray-500 font-normal">máx</span></p>
+                  <p className="text-xs text-gray-400">{series.length} séries</p>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <footer className="text-center text-gray-600 text-[10px] italic pt-2 border-t border-gray-800">
@@ -70,7 +107,7 @@ function ReportModal({ sessionData, onClose, onShare }: { sessionData: any, onCl
       </div>
 
       {/* Botões de Ação (Fora da área de print) */}
-      <div className="flex gap-3 mt-6 w-full max-w-sm">
+      <div className="flex gap-3 mt-6 w-full max-w-sm mb-4">
         <button onClick={onClose} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl transition-all text-sm">
           FECHAR
         </button>
