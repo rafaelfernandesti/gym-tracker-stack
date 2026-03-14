@@ -131,14 +131,15 @@ app.post('/plans', async (req, res) => {
 });
 // NOVA ROTA: Registrar Execução Diária (Log)
 app.post('/logs', async (req, res) => {
-    const { userId, exerciseId, carga, repsFeitas } = req.body;
+    const { userId, exerciseId, carga, repsFeitas, sessionId } = req.body;
     try {
         const log = await prisma.workoutLog.create({
             data: {
                 userId,
                 exerciseId,
                 carga,
-                repsFeitas
+                repsFeitas,
+                sessionId: sessionId || null
             }
         });
         res.status(201).json(log);
