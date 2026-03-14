@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const MEU_USER_ID = "c0476249-0dfe-42f7-8c5f-9d6a09e8e4e2"; 
 const API_URL = "https://gym-tracker-api-yomc.onrender.com"; 
 
 function App() {
+  // === ESTADOS DE AUTENTICAÇÃO ===
+  const [user, setUser] = useState<{id: string, nome: string, email: string} | null>(null);
+  const [isLoginModo, setIsLoginModo] = useState(true);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authSenha, setAuthSenha] = useState('');
+  const [authNome, setAuthNome] = useState('');
+  const [authErro, setAuthErro] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+
+  // === ESTADOS DO APLICATIVO ===
   const [activeTab, setActiveTab] = useState<'treinar' | 'historico' | 'exercicios'>('treinar');
   const [exerciseId, setExerciseId] = useState('');
   const [exercises, setExercises] = useState<any[]>([]);
@@ -17,51 +26,105 @@ function App() {
   const [status, setStatus] = useState('');
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
 
-  // Estados do Gerenciamento de Exercícios
   const [novoNome, setNovoNome] = useState('');
   const [novoGrupo, setNovoGrupo] = useState('Peito');
   const [novaFicha, setNovaFicha] = useState('A'); 
   const [statusExercicio, setStatusExercicio] = useState('');
   const [editingExId, setEditingExId] = useState<number | null>(null);
 
-  // Estados do Cronômetro
-  const [tempoDescanso, setTempoDescanso] = useState(90); // Padrão de 90s
+  const [tempoDescanso, setTempoDescanso] = useState(90);
   const [timerAtivo, setTimerAtivo] = useState(false);
 
-  // Efeito do Cronômetro
+  // === EFEITOS ===
+  
+  // 1. Verifica se já existe um usuário logado salvo no celular
+  useEffect(() => {
+    const usuarioSalvo = localStorage.getItem('@GymTracker:user');
+    if (usuarioSalvo) {
+      setUser(JSON.parse(usuarioSalvo));
+    }
+  }, []);
+
+  // 2. Cronômetro
   useEffect(() => {
     let intervalo: ReturnType<typeof setInterval>;
     if (timerAtivo && tempoDescanso > 0) {
-      intervalo = setInterval(() => {
-        setTempoDescanso((t) => t - 1);
-      }, 1000);
+      intervalo = setInterval(() => setTempoDescanso((t) => t - 1), 1000);
     } else if (tempoDescanso === 0 && timerAtivo) {
       setTimerAtivo(false);
-      // Aqui você poderia colocar um aviso sonoro no futuro
     }
     return () => clearInterval(intervalo);
   }, [timerAtivo, tempoDescanso]);
 
-  const formatarTempo = (segundos: number) => {
-    const m = Math.floor(segundos / 60).toString().padStart(2, '0');
-    const s = (segundos % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
+  // 3. Carregar dados quando o usuário logar
+  useEffect(() => { 
+    if (user) fetchExercises(); 
+  }, [user]);
+  
+  useEffect(() => { 
+    if (exerciciosFiltrados.length > 0) {
+      setExerciseId(exerciciosFiltrados[0].id.toString());
+    } else {
+      setExerciseId('');
+      setEvolutionData([]);
+    }
+  }, [fichaAtiva, exercises]);
+
+  useEffect(() => { 
+    if (user && exerciseId) fetchEvolution(); 
+  }, [exerciseId, user]);
+
+  // === FUNÇÕES DE AUTENTICAÇÃO ===
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthErro('');
+    setAuthLoading(true);
+
+    const endpoint = isLoginModo ? '/login' : '/register';
+    const body = isLoginModo ? { email: authEmail, senha: authSenha } : { email: authEmail, senha: authSenha, nome: authNome };
+
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setUser(data);
+        localStorage.setItem('@GymTracker:user', JSON.stringify(data)); // Salva a sessão
+        setAuthEmail(''); setAuthSenha(''); setAuthNome('');
+      } else {
+        setAuthErro(data.error || 'Erro na autenticação.');
+      }
+    } catch (error) {
+      setAuthErro('Erro de conexão com o servidor.');
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('@GymTracker:user');
+    setUser(null);
+    setEvolutionData([]);
+  };
+
+  // === FUNÇÕES DO APLICATIVO ===
   const fetchExercises = async () => {
     try {
       const response = await fetch(`${API_URL}/exercises`);
-      if (response.ok) {
-        const data = await response.json();
-        setExercises(data);
-      }
+      if (response.ok) setExercises(await response.json());
     } catch (e) { console.error("Erro ao carregar exercícios", e); }
   };
 
   const fetchEvolution = async () => {
-    if (!exerciseId) return;
+    if (!exerciseId || !user) return;
     try {
-      const response = await fetch(`${API_URL}/logs/evolution/${MEU_USER_ID}/${exerciseId}`);
+      // Agora usamos o ID dinâmico do usuário logado
+      const response = await fetch(`${API_URL}/logs/evolution/${user.id}/${exerciseId}`);
       if (response.ok) {
         const data = await response.json();
         const formattedData = data.map((log: any) => ({
@@ -74,29 +137,16 @@ function App() {
     } catch (error) { console.error(error); }
   };
 
-  useEffect(() => { fetchExercises(); }, []);
-  
-  useEffect(() => { 
-    if (exerciciosFiltrados.length > 0) {
-      setExerciseId(exerciciosFiltrados[0].id.toString());
-    } else {
-      setExerciseId('');
-      setEvolutionData([]);
-    }
-  }, [fichaAtiva, exercises]);
-
-  useEffect(() => { fetchEvolution(); }, [exerciseId]);
-
   const handleRegistrarTreino = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!exerciseId) return;
+    if (!exerciseId || !user) return;
     setStatus('Salvando...');
     try {
       const response = await fetch(`${API_URL}/logs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: MEU_USER_ID,
+          userId: user.id, // Usa o ID do usuário real
           exerciseId: Number(exerciseId),
           carga: Number(carga),
           repsFeitas: Number(reps),
@@ -107,12 +157,9 @@ function App() {
         setStatus('Série registrada! 💪');
         setCarga(''); setReps('');
         fetchEvolution();
-        
-        // Dispara o cronômetro automaticamente
         setTempoDescanso(90);
         setTimerAtivo(true);
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-
         setTimeout(() => setStatus(''), 3000);
       }
     } catch (error) { setStatus('Erro de conexão.'); }
@@ -136,7 +183,6 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome: novoNome, grupoMuscular: novoGrupo, ficha: novaFicha }),
       });
-
       if (response.ok) {
         setStatusExercicio('Exercício adicionado! 🏋️‍♂️');
         limparFormularioExercicio();
@@ -155,7 +201,6 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome: novoNome, grupoMuscular: novoGrupo, ficha: novaFicha }),
       });
-
       if (response.ok) {
         setStatusExercicio('Exercício atualizado! ✅');
         limparFormularioExercicio();
@@ -194,10 +239,64 @@ function App() {
   const cargaMaxima = evolutionData.length > 0 ? Math.max(...evolutionData.map(d => d.carga)) : 0;
   const volumeMaximo = evolutionData.length > 0 ? Math.max(...evolutionData.map(d => d.volume)) : 0;
 
+  // === RENDERIZAÇÃO DA TELA DE LOGIN ===
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col justify-center items-center p-4 font-sans text-white">
+        <div className="w-full max-w-md bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700">
+          <h1 className="text-4xl font-black text-center text-blue-500 tracking-tight mb-2">GYM<span className="text-white">TRACKER</span></h1>
+          <p className="text-center text-gray-400 mb-8 font-medium">
+            {isLoginModo ? 'Acesse seus treinos' : 'Crie sua conta'}
+          </p>
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            {!isLoginModo && (
+              <div>
+                <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Nome (Opcional)</label>
+                <input type="text" value={authNome} onChange={(e) => setAuthNome(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="Seu nome" />
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">E-mail</label>
+              <input type="email" required value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="seu@email.com" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Senha</label>
+              <input type="password" required value={authSenha} onChange={(e) => setAuthSenha(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
+            </div>
+            
+            {authErro && <p className="text-red-400 text-sm text-center font-medium">{authErro}</p>}
+            
+            <button type="submit" disabled={authLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50 mt-2">
+              {authLoading ? 'AGUARDE...' : (isLoginModo ? 'ENTRAR' : 'CADASTRAR')}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <button onClick={() => { setIsLoginModo(!isLoginModo); setAuthErro(''); }} className="text-gray-400 hover:text-white text-sm font-medium transition-colors">
+              {isLoginModo ? 'Não tem uma conta? Crie agora' : 'Já tem uma conta? Faça login'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // === RENDERIZAÇÃO DO APLICATIVO PRINCIPAL ===
+  const formatarTempo = (segundos: number) => {
+    const m = Math.floor(segundos / 60).toString().padStart(2, '0');
+    const s = (segundos % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 font-sans pb-10">
-      <header className="max-w-md mx-auto mb-8 mt-4 text-center">
-        <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
+      <header className="max-w-md mx-auto mb-6 mt-2 flex justify-between items-center">
+        <h1 className="text-2xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-gray-400 font-medium truncate max-w-[120px]">{user.nome || user.email.split('@')[0]}</span>
+          <button onClick={handleLogout} className="bg-red-500/10 text-red-400 hover:bg-red-500/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">SAIR</button>
+        </div>
       </header>
 
       <div className="max-w-md mx-auto flex bg-gray-800 rounded-lg p-1 mb-6 text-sm font-medium">
@@ -244,7 +343,6 @@ function App() {
               {status && <div className="mt-4 text-center text-green-400 font-medium">{status}</div>}
             </div>
 
-            {/* Painel do Cronômetro */}
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 text-center">
               <h3 className="text-gray-400 text-xs font-bold uppercase mb-2">Tempo de Descanso</h3>
               <div className={`text-5xl font-black mb-6 ${timerAtivo ? 'text-blue-400' : 'text-gray-300'}`}>
@@ -252,21 +350,14 @@ function App() {
               </div>
               <div className="flex justify-center gap-3">
                 <button onClick={() => setTempoDescanso(t => Math.max(0, t - 15))} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">-15s</button>
-                <button 
-                  onClick={() => setTimerAtivo(!timerAtivo)} 
-                  className={`${timerAtivo ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-500'} text-white font-bold py-2 px-6 rounded-lg w-32`}
-                >
-                  {timerAtivo ? 'PAUSAR' : 'INICIAR'}
-                </button>
+                <button onClick={() => setTimerAtivo(!timerAtivo)} className={`${timerAtivo ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-500'} text-white font-bold py-2 px-6 rounded-lg w-32`}>{timerAtivo ? 'PAUSAR' : 'INICIAR'}</button>
                 <button onClick={() => { setTimerAtivo(false); setTempoDescanso(90); }} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">ZERAR</button>
                 <button onClick={() => setTempoDescanso(t => t + 15)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">+15s</button>
               </div>
             </div>
-
           </div>
         )}
 
-        {/* ... (O resto das abas histórico e exercícios permanecem inalteradas) ... */}
         {activeTab === 'historico' && (
           <div className="animate-in fade-in space-y-4">
             <div className="flex gap-4">
