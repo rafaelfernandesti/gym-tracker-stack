@@ -267,7 +267,10 @@ function App() {
   const last30Days = Array.from({ length: 30 }).map((_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (29 - i));
-    return d.toISOString().split('T')[0];
+    return {
+      full: d.toISOString().split('T')[0],
+      dia: d.getDate().toString() // Pega apenas o número do dia
+    };
   });
 
   if (!user) {
@@ -338,13 +341,15 @@ function App() {
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
               <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Frequência (Últimos 30 Dias)</h3>
               <div className="flex flex-wrap gap-2 justify-start">
-                {last30Days.map((day) => {
-                  const treinou = activeDays.includes(day);
+                {last30Days.map((dayObj) => {
+                  const treinou = activeDays.includes(dayObj.full);
                   return (
                     <div
-                      key={day}
-                      className={`w-[13.5%] aspect-square rounded-md transition-all duration-300 ${treinou ? 'bg-green-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-gray-900 border border-gray-700'}`}
-                    />
+                      key={dayObj.full}
+                      className={`w-[13.5%] aspect-square rounded-md transition-all duration-300 flex items-center justify-center text-[11px] font-bold ${treinou ? 'bg-green-500 text-white shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-gray-900 border border-gray-700 text-gray-500'}`}
+                    >
+                      {dayObj.dia}
+                    </div>
                   );
                 })}
               </div>
