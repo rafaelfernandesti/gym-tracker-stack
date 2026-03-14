@@ -206,6 +206,34 @@ function App() {
     }
   };
 
+  // === FUNÇÕES DE PESO CORPORAL (RECUPERADAS) ===
+  const handleRegistrarPeso = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !pesoAtualInput) return;
+    setStatusPeso('Salvando...');
+    try {
+      const response = await fetch(`${API_URL}/weight`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, peso: Number(pesoAtualInput) }),
+      });
+      if (response.ok) {
+        setStatusPeso('Peso atualizado! 📈');
+        setPesoAtualInput('');
+        fetchWeightHistory();
+        setTimeout(() => setStatusPeso(''), 3000);
+      }
+    } catch (error) { setStatusPeso('Erro ao salvar peso.'); }
+  };
+
+  const handleExcluirPeso = async (logId: number) => {
+    if (!confirm('Tem certeza que deseja apagar este registro de peso?')) return;
+    try {
+      const response = await fetch(`${API_URL}/weight/${logId}`, { method: 'DELETE' });
+      if (response.ok) fetchWeightHistory();
+    } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
+  };
+
   // === NOVA FUNÇÃO: COMPARTILHAR RELATÓRIO (HTML -> Imagem -> Share) ===
   const handleShareReport = async () => {
     const card = document.getElementById('report-card');
