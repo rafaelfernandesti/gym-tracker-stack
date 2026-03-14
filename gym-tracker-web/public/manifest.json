@@ -3,12 +3,12 @@
     "name": "GymTracker - Meu Treino",
     "icons": [
         {
-            "src": "https://images.totalpass.com/public/1280x720/czM6Ly90cC1pbWFnZS1hZG1pbi1wcm9kL2d5bXMvam1sMDdlbGJ2cG41b2tlcnlpdmQzejRka2Nyem40bmh0MGI3empxd2Roc3FqMXAwcHBrNDd3dzBhY2s2",
+            "src": "/logo.png",
             "type": "image/png",
             "sizes": "192x192"
         },
         {
-            "src": "https://formulaacademia.bodytech.company/assets/custom_images/img-logo.svg",
+            "src": "/logo.png",
             "type": "image/png",
             "sizes": "512x512"
         }
