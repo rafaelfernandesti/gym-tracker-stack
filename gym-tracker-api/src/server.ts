@@ -294,6 +294,25 @@ app.delete('/weight/:id', async (req, res) => {
     }
 });
 
+// ROTA: Buscar frequência de treinos (dias activos)
+app.get('/logs/frequency/:userId', async (req, res) => {
+    try {
+        const logs = await prisma.workoutLog.findMany({
+            where: { userId: req.params.userId },
+            select: { data: true },
+            orderBy: { data: 'asc' }
+        });
+
+        // Extrai apenas as datas únicas no formato YYYY-MM-DD
+        const diasActivos = [...new Set(logs.map(log => log.data.toISOString().split('T')[0]))];
+
+        res.json(diasActivos);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao buscar frequência.' });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
