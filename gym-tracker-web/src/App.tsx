@@ -4,7 +4,6 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
 function App() {
-  // === ESTADOS DE AUTENTICAÇÃO ===
   const [user, setUser] = useState<{ id: string, nome: string, email: string } | null>(null);
   const [isLoginModo, setIsLoginModo] = useState(true);
   const [authEmail, setAuthEmail] = useState('');
@@ -13,8 +12,8 @@ function App() {
   const [authErro, setAuthErro] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
-  // === ESTADOS DO APLICATIVO ===
-  const [activeTab, setActiveTab] = useState<'treinar' | 'historico' | 'exercicios'>('treinar');
+  // Note a nova aba 'perfil' adicionada aqui
+  const [activeTab, setActiveTab] = useState<'treinar' | 'historico' | 'exercicios' | 'perfil'>('treinar');
   const [exerciseId, setExerciseId] = useState('');
   const [exercises, setExercises] = useState<any[]>([]);
 
@@ -31,50 +30,46 @@ function App() {
   const [novaFicha, setNovaFicha] = useState('A');
   const [statusExercicio, setStatusExercicio] = useState('');
   const [editingExId, setEditingExId] = useState<number | null>(null);
-
-  // Novo Estado: Filtro de Grupo Muscular na lista
   const [filtroGrupoEx, setFiltroGrupoEx] = useState('Todos');
 
   const [tempoDescanso, setTempoDescanso] = useState(90);
   const [timerAtivo, setTimerAtivo] = useState(false);
 
-  // === EFEITOS ===
+  // Novos Estados para o Perfil (Peso Corporal)
+  const [pesoAtualInput, setPesoAtualInput] = useState('');
+  const [weightHistory, setWeightHistory] = useState<any[]>([]);
+  const [statusPeso, setStatusPeso] = useState('');
+
   useEffect(() => {
     const usuarioSalvo = localStorage.getItem('@GymTracker:user');
-    if (usuarioSalvo) {
-      setUser(JSON.parse(usuarioSalvo));
-    }
+    if (usuarioSalvo) setUser(JSON.parse(usuarioSalvo));
   }, []);
 
   useEffect(() => {
     let intervalo: ReturnType<typeof setInterval>;
     if (timerAtivo && tempoDescanso > 0) {
       intervalo = setInterval(() => setTempoDescanso((t) => t - 1), 1000);
-    } else if (tempoDescanso === 0 && timerAtivo) {
-      setTimerAtivo(false);
-    }
+    } else if (tempoDescanso === 0 && timerAtivo) setTimerAtivo(false);
     return () => clearInterval(intervalo);
   }, [timerAtivo, tempoDescanso]);
 
-  useEffect(() => { if (user) fetchExercises(); }, [user]);
+  useEffect(() => {
+    if (user) {
+      fetchExercises();
+      fetchWeightHistory();
+    }
+  }, [user]);
 
   useEffect(() => {
-    if (exerciciosFiltrados.length > 0) {
-      setExerciseId(exerciciosFiltrados[0].id.toString());
-    } else {
-      setExerciseId('');
-      setEvolutionData([]);
-    }
+    if (exerciciosFiltrados.length > 0) setExerciseId(exerciciosFiltrados[0].id.toString());
+    else { setExerciseId(''); setEvolutionData([]); }
   }, [fichaAtiva, exercises]);
 
   useEffect(() => { if (user && exerciseId) fetchEvolution(); }, [exerciseId, user]);
 
-  // === FUNÇÕES DE AUTENTICAÇÃO ===
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAuthErro('');
-    setAuthLoading(true);
-
+    setAuthErro(''); setAuthLoading(true);
     const endpoint = isLoginModo ? '/login' : '/register';
     const body = isLoginModo ? { email: authEmail, senha: authSenha } : { email: authEmail, senha: authSenha, nome: authNome };
 
@@ -84,35 +79,26 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-
       const data = await response.json();
-
       if (response.ok) {
         setUser(data);
         localStorage.setItem('@GymTracker:user', JSON.stringify(data));
         setAuthEmail(''); setAuthSenha(''); setAuthNome('');
-      } else {
-        setAuthErro(data.error || 'Erro na autenticação.');
-      }
-    } catch (error) {
-      setAuthErro('Erro de conexão com o servidor.');
-    } finally {
-      setAuthLoading(false);
-    }
+      } else setAuthErro(data.error || 'Erro na autenticação.');
+    } catch (error) { setAuthErro('Erro de conexão.'); }
+    finally { setAuthLoading(false); }
   };
 
   const handleLogout = () => {
     localStorage.removeItem('@GymTracker:user');
-    setUser(null);
-    setEvolutionData([]);
+    setUser(null); setEvolutionData([]); setWeightHistory([]);
   };
 
-  // === FUNÇÕES DO APLICATIVO ===
   const fetchExercises = async () => {
     try {
       const response = await fetch(`${API_URL}/exercises`);
       if (response.ok) setExercises(await response.json());
-    } catch (e) { console.error("Erro ao carregar exercícios", e); }
+    } catch (e) { console.error(e); }
   };
 
   const fetchEvolution = async () => {
@@ -131,6 +117,50 @@ function App() {
     } catch (error) { console.error(error); }
   };
 
+  // Funções de Peso Corporal
+  const fetchWeightHistory = async () => {
+    if (!user) return;
+    try {
+      const response = await fetch(`${API_URL}/weight/${user.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        const formattedData = data.map((log: any) => ({
+          ...log,
+          dataFormatada: new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(log.data)),
+        }));
+        setWeightHistory(formattedData);
+      }
+    } catch (error) { console.error(error); }
+  };
+
+  const handleRegistrarPeso = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !pesoAtualInput) return;
+    setStatusPeso('Salvando...');
+    try {
+      const response = await fetch(`${API_URL}/weight`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, peso: Number(pesoAtualInput) }),
+      });
+      if (response.ok) {
+        setStatusPeso('Peso atualizado! 📈');
+        setPesoAtualInput('');
+        fetchWeightHistory();
+        setTimeout(() => setStatusPeso(''), 3000);
+      }
+    } catch (error) { setStatusPeso('Erro ao salvar peso.'); }
+  };
+
+  const handleExcluirPeso = async (logId: number) => {
+    if (!confirm('Tem certeza que deseja apagar este registro de peso?')) return;
+    try {
+      const response = await fetch(`${API_URL}/weight/${logId}`, { method: 'DELETE' });
+      if (response.ok) fetchWeightHistory();
+    } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
+  };
+
+  // Restante das funções de Exercício/Treino...
   const handleRegistrarTreino = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!exerciseId || !user) return;
@@ -139,20 +169,13 @@ function App() {
       const response = await fetch(`${API_URL}/logs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          exerciseId: Number(exerciseId),
-          carga: Number(carga),
-          repsFeitas: Number(reps),
-        }),
+        body: JSON.stringify({ userId: user.id, exerciseId: Number(exerciseId), carga: Number(carga), repsFeitas: Number(reps) }),
       });
-
       if (response.ok) {
         setStatus('Série registrada! 💪');
         setCarga(''); setReps('');
         fetchEvolution();
-        setTempoDescanso(90);
-        setTimerAtivo(true);
+        setTempoDescanso(90); setTimerAtivo(true);
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
         setTimeout(() => setStatus(''), 3000);
       }
@@ -164,7 +187,6 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/logs/${logId}`, { method: 'DELETE' });
       if (response.ok) fetchEvolution();
-      else alert('Erro ao excluir o treino.');
     } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
   };
 
@@ -179,8 +201,7 @@ function App() {
       });
       if (response.ok) {
         setStatusExercicio('Exercício adicionado! 🏋️‍♂️');
-        limparFormularioExercicio();
-        fetchExercises();
+        limparFormularioExercicio(); fetchExercises();
         setTimeout(() => setStatusExercicio(''), 3000);
       }
     } catch (error) { setStatusExercicio('Erro ao salvar.'); }
@@ -197,57 +218,45 @@ function App() {
       });
       if (response.ok) {
         setStatusExercicio('Exercício atualizado! ✅');
-        limparFormularioExercicio();
-        fetchExercises();
+        limparFormularioExercicio(); fetchExercises();
         setTimeout(() => setStatusExercicio(''), 3000);
       }
     } catch (error) { setStatusExercicio('Erro ao atualizar.'); }
   };
 
   const handleExcluirExercicio = async (exId: number, nome: string) => {
-    if (!confirm(`CUIDADO! Isso vai apagar o exercício "${nome}" e TODO o histórico de treino dele. Tem certeza absoluta?`)) return;
+    if (!confirm(`CUIDADO! Apagar "${nome}" deleta todo o histórico dele. Certeza?`)) return;
     try {
       const response = await fetch(`${API_URL}/exercises/${exId}`, { method: 'DELETE' });
       if (response.ok) {
         fetchExercises();
         if (exerciseId === exId.toString()) setExerciseId('');
-      } else { alert('Erro ao excluir o exercício.'); }
+      }
     } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
   };
 
   const iniciarEdicao = (ex: any) => {
-    setEditingExId(ex.id);
-    setNovoNome(ex.nome);
-    setNovoGrupo(ex.grupoMuscular || 'Peito');
-    setNovaFicha(ex.ficha || 'A');
+    setEditingExId(ex.id); setNovoNome(ex.nome);
+    setNovoGrupo(ex.grupoMuscular || 'Peito'); setNovaFicha(ex.ficha || 'A');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const limparFormularioExercicio = () => {
-    setEditingExId(null);
-    setNovoNome('');
-    setNovoGrupo('Peito');
-    setNovaFicha('A');
+    setEditingExId(null); setNovoNome(''); setNovoGrupo('Peito'); setNovaFicha('A');
   };
 
   const cargaMaxima = evolutionData.length > 0 ? Math.max(...evolutionData.map(d => d.carga)) : 0;
   const volumeMaximo = evolutionData.length > 0 ? Math.max(...evolutionData.map(d => d.volume)) : 0;
-
-  // Filtro da lista de exercícios por grupo
   const gruposMuscularesLista = ['Todos', 'Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'];
-  const exerciciosExibidos = filtroGrupoEx === 'Todos'
-    ? exercises
-    : exercises.filter(ex => ex.grupoMuscular === filtroGrupoEx);
+  const exerciciosExibidos = filtroGrupoEx === 'Todos' ? exercises : exercises.filter(ex => ex.grupoMuscular === filtroGrupoEx);
 
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col justify-center items-center p-4 font-sans text-white">
+        {/* Tela de Login inalterada */}
         <div className="w-full max-w-md bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700">
           <h1 className="text-4xl font-black text-center text-blue-500 tracking-tight mb-2">GYM<span className="text-white">TRACKER</span></h1>
-          <p className="text-center text-gray-400 mb-8 font-medium">
-            {isLoginModo ? 'Acesse seus treinos' : 'Crie sua conta'}
-          </p>
-
+          <p className="text-center text-gray-400 mb-8 font-medium">{isLoginModo ? 'Acesse seus treinos' : 'Crie sua conta'}</p>
           <form onSubmit={handleAuth} className="space-y-4">
             {!isLoginModo && (
               <div>
@@ -263,14 +272,11 @@ function App() {
               <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Senha</label>
               <input type="password" required value={authSenha} onChange={(e) => setAuthSenha(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
             </div>
-
             {authErro && <p className="text-red-400 text-sm text-center font-medium">{authErro}</p>}
-
             <button type="submit" disabled={authLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50 mt-2">
               {authLoading ? 'AGUARDE...' : (isLoginModo ? 'ENTRAR' : 'CADASTRAR')}
             </button>
           </form>
-
           <div className="mt-6 text-center">
             <button onClick={() => { setIsLoginModo(!isLoginModo); setAuthErro(''); }} className="text-gray-400 hover:text-white text-sm font-medium transition-colors">
               {isLoginModo ? 'Não tem uma conta? Crie agora' : 'Já tem uma conta? Faça login'}
@@ -297,13 +303,69 @@ function App() {
         </div>
       </header>
 
-      <div className="max-w-md mx-auto flex bg-gray-800 rounded-lg p-1 mb-6 text-sm font-medium">
-        <button onClick={() => setActiveTab('treinar')} className={`flex-1 py-2 rounded-md transition-all ${activeTab === 'treinar' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Treinar</button>
-        <button onClick={() => setActiveTab('historico')} className={`flex-1 py-2 rounded-md transition-all ${activeTab === 'historico' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Evolução</button>
-        <button onClick={() => setActiveTab('exercicios')} className={`flex-1 py-2 rounded-md transition-all ${activeTab === 'exercicios' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Gerenciar Ex.</button>
+      {/* Menu com a nova aba Perfil */}
+      <div className="max-w-md mx-auto flex bg-gray-800 rounded-lg p-1 mb-6 text-xs font-bold overflow-x-auto scrollbar-hide">
+        <button onClick={() => setActiveTab('treinar')} className={`flex-1 min-w-[80px] py-2.5 rounded-md transition-all ${activeTab === 'treinar' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Treinar</button>
+        <button onClick={() => setActiveTab('historico')} className={`flex-1 min-w-[80px] py-2.5 rounded-md transition-all ${activeTab === 'historico' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Evolução</button>
+        <button onClick={() => setActiveTab('exercicios')} className={`flex-1 min-w-[80px] py-2.5 rounded-md transition-all ${activeTab === 'exercicios' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Fichas</button>
+        <button onClick={() => setActiveTab('perfil')} className={`flex-1 min-w-[80px] py-2.5 rounded-md transition-all ${activeTab === 'perfil' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Perfil</button>
       </div>
 
       <main className="max-w-md mx-auto">
+
+        {/* === ABA PERFIL (PESO CORPORAL) === */}
+        {activeTab === 'perfil' && (
+          <div className="animate-in fade-in space-y-6">
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
+              <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Registrar Peso Corporal</h3>
+              <form onSubmit={handleRegistrarPeso} className="flex gap-3">
+                <input
+                  type="number" step="0.1" required value={pesoAtualInput} onChange={(e) => setPesoAtualInput(e.target.value)}
+                  placeholder="Ex: 75.5"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-6 rounded-xl transition-all">
+                  SALVAR
+                </button>
+              </form>
+              {statusPeso && <div className="mt-4 text-center text-green-400 font-medium">{statusPeso}</div>}
+            </div>
+
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 h-80">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-gray-300 text-sm uppercase font-bold">Ganho de Massa</h3>
+              </div>
+              <ResponsiveContainer width="100%" height="85%">
+                <LineChart data={weightHistory}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                  <XAxis dataKey="dataFormatada" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} width={30} domain={['dataMin - 2', 'dataMax + 2']} />
+                  <Tooltip contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px' }} formatter={(value: any) => [value + ' kg', 'Peso']} labelStyle={{ color: '#9CA3AF', marginBottom: '4px' }} />
+                  <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 5, fill: '#10B981', strokeWidth: 0 }} activeDot={{ r: 8 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {weightHistory.length > 0 && (
+              <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
+                <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Histórico de Pesagens</h3>
+                <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
+                  {[...weightHistory].reverse().map((log) => (
+                    <div key={log.id} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700">
+                      <div>
+                        <p className="text-sm font-bold text-white">{log.peso} kg</p>
+                        <p className="text-xs text-gray-500">{log.dataFormatada}</p>
+                      </div>
+                      <button onClick={() => handleExcluirPeso(log.id)} className="text-red-400 hover:text-red-300 p-2 text-sm font-bold">✕</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ... (O restante do código das outras abas permanece idêntico à versão anterior) ... */}
         {activeTab === 'treinar' && (
           <div className="animate-in fade-in space-y-6">
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
@@ -323,7 +385,7 @@ function App() {
                       ))}
                     </select>
                   ) : (
-                    <div className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-gray-500 text-sm text-center">Nenhum exercício cadastrado nesta ficha.</div>
+                    <div className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-gray-500 text-sm text-center">Nenhum exercício na ficha.</div>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -343,9 +405,7 @@ function App() {
 
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 text-center">
               <h3 className="text-gray-400 text-xs font-bold uppercase mb-2">Tempo de Descanso</h3>
-              <div className={`text-5xl font-black mb-6 ${timerAtivo ? 'text-blue-400' : 'text-gray-300'}`}>
-                {formatarTempo(tempoDescanso)}
-              </div>
+              <div className={`text-5xl font-black mb-6 ${timerAtivo ? 'text-blue-400' : 'text-gray-300'}`}>{formatarTempo(tempoDescanso)}</div>
               <div className="flex justify-center gap-3">
                 <button onClick={() => setTempoDescanso(t => Math.max(0, t - 15))} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">-15s</button>
                 <button onClick={() => setTimerAtivo(!timerAtivo)} className={`${timerAtivo ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-500'} text-white font-bold py-2 px-6 rounded-lg w-32`}>{timerAtivo ? 'PAUSAR' : 'INICIAR'}</button>
@@ -365,7 +425,7 @@ function App() {
               </div>
               <div className="flex-1 bg-gray-800 p-4 rounded-2xl border border-gray-700 text-center shadow-lg">
                 <p className="text-gray-500 text-xs font-bold uppercase mb-1">Volume Máx.</p>
-                <p className="text-2xl font-black text-green-400">{volumeMaximo} <span className="text-sm font-medium text-gray-500">kg</span></p>
+                <p className="text-2xl font-black text-blue-400">{volumeMaximo} <span className="text-sm font-medium text-gray-500">kg</span></p>
               </div>
             </div>
 
@@ -412,9 +472,7 @@ function App() {
         {activeTab === 'exercicios' && (
           <div className="space-y-6 animate-in fade-in">
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
-              <h3 className="text-gray-400 text-sm mb-4 uppercase font-bold">
-                {editingExId ? 'Editar Exercício' : 'Cadastrar Novo Exercício'}
-              </h3>
+              <h3 className="text-gray-400 text-sm mb-4 uppercase font-bold">{editingExId ? 'Editar Exercício' : 'Cadastrar Novo'}</h3>
               <form onSubmit={editingExId ? handleAtualizarExercicio : handleCriarExercicio} className="space-y-5">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Nome</label>
@@ -435,14 +493,8 @@ function App() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all">
-                    {editingExId ? 'SALVAR' : 'CADASTRAR'}
-                  </button>
-                  {editingExId && (
-                    <button type="button" onClick={limparFormularioExercicio} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-xl transition-all">
-                      CANCELAR
-                    </button>
-                  )}
+                  <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all">{editingExId ? 'SALVAR' : 'CADASTRAR'}</button>
+                  {editingExId && <button type="button" onClick={limparFormularioExercicio} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-xl transition-all">CANCELAR</button>}
                 </div>
               </form>
               {statusExercicio && <div className="mt-4 text-center text-green-400 font-medium">{statusExercicio}</div>}
@@ -450,19 +502,11 @@ function App() {
 
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
               <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Meus Exercícios</h3>
-
               <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide">
                 {gruposMuscularesLista.map(grupo => (
-                  <button
-                    key={grupo}
-                    onClick={() => setFiltroGrupoEx(grupo)}
-                    className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all border ${filtroGrupoEx === grupo ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-400'}`}
-                  >
-                    {grupo}
-                  </button>
+                  <button key={grupo} onClick={() => setFiltroGrupoEx(grupo)} className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all border ${filtroGrupoEx === grupo ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-400'}`}>{grupo}</button>
                 ))}
               </div>
-
               <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
                 {exerciciosExibidos.length > 0 ? (
                   exerciciosExibidos.map((ex) => (

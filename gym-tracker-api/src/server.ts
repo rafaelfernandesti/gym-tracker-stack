@@ -250,6 +250,50 @@ app.delete('/exercises/:id', async (req, res) => {
     }
 });
 
+// Registrar novo peso
+app.post('/weight', async (req, res) => {
+    const { userId, peso } = req.body;
+    try {
+        const log = await prisma.weightLog.create({
+            data: { userId, peso: Number(peso) }
+        });
+        // Atualiza também o peso mais recente no perfil do usuário
+        await prisma.user.update({
+            where: { id: userId },
+            data: { pesoAtual: Number(peso) }
+        });
+        res.status(201).json(log);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao registrar peso.' });
+    }
+});
+
+// Buscar histórico de peso do usuário
+app.get('/weight/:userId', async (req, res) => {
+    try {
+        const history = await prisma.weightLog.findMany({
+            where: { userId: req.params.userId },
+            orderBy: { data: 'asc' }
+        });
+        res.json(history);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar histórico de peso.' });
+    }
+});
+
+// Excluir registro de peso incorreto
+app.delete('/weight/:id', async (req, res) => {
+    try {
+        await prisma.weightLog.delete({
+            where: { id: Number(req.params.id) }
+        });
+        res.json({ message: 'Registro de peso excluído' });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao excluir peso.' });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {

@@ -21,6 +21,16 @@ model User {
   // Relacionamentos:
   WorkoutLog  WorkoutLog[]
   WorkoutPlan WorkoutPlan[]
+  WeightLog   WeightLog[]
+}
+
+model WeightLog {
+  id        Int      @id @default(autoincrement())
+  peso      Float
+  data      DateTime @default(now())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model Exercise {
