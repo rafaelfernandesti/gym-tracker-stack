@@ -366,7 +366,26 @@ app.put('/sessions/end', async (req, res) => {
         res.status(500).json({ error: 'Erro ao finalizar treino.' });
     }
 });
+// 4. Excluir uma Sessão de Treino inteira
+app.delete('/sessions/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        // 1º passo: Apaga todos os logs vinculados a esta sessão para não deixar dados órfãos
+        await prisma.workoutLog.deleteMany({
+            where: { sessionId: id }
+        });
 
+        // 2º passo: Apaga a sessão do calendário
+        await prisma.workoutSession.delete({
+            where: { id }
+        });
+
+        res.json({ message: 'Sessão e séries excluídas com sucesso' });
+    } catch (error) {
+        console.error("ERRO AO EXCLUIR SESSÃO:", error);
+        res.status(500).json({ error: 'Erro ao excluir a sessão.' });
+    }
+});
 // 3. Buscar Relatório Detalhado de um dia específico
 app.get('/reports/:userId/:date', async (req, res) => {
     const { userId, date } = req.params; // date no formato YYYY-MM-DD
