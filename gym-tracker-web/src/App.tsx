@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import html2canvas from 'html2canvas'; // Biblioteca para print
+import { toBlob } from 'html-to-image';
 
 const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
@@ -235,31 +235,32 @@ function App() {
   };
 
   // === NOVA FUNÇÃO: COMPARTILHAR RELATÓRIO (HTML -> Imagem -> Share) ===
+  // === NOVA FUNÇÃO: COMPARTILHAR RELATÓRIO (USANDO HTML-TO-IMAGE) ===
   const handleShareReport = async () => {
     const card = document.getElementById('report-card');
     if (!card) return;
 
     try {
-      // 1. Transforma o HTML em um Canvas, depois em Blob (imagem)
-      const canvas = await html2canvas(card, { backgroundColor: '#030712', scale: 2 }); // Escala 2 para alta definição
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
+      // Usa a nova biblioteca que suporta cores modernas (oklch)
+      const blob = await toBlob(card, {
+        backgroundColor: '#030712',
+        pixelRatio: 2 // Escala 2 para alta definição
+      });
 
-        // 2. Cria um arquivo a partir do Blob
-        const file = new File([blob], `GymTracker-Resumo-${selectedReport.startTime.split('T')[0]}.png`, { type: 'image/png' });
+      if (!blob) throw new Error('Falha ao gerar a imagem');
 
-        // 3. Usa a Web Share API do navegador (Funciona nativo no celular/Chrome)
-        if (navigator.share && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: 'Meu Treino no GymTracker 💪',
-            text: 'Olha o resumo do meu treino de hoje! Gerado pelo GymTracker.',
-          });
-        } else {
-          // Fallback caso o navegador não suporte compartilhamento de arquivo
-          alert('Seu navegador não suporta compartilhamento direto de imagem. Tire um print da tela para compartilhar!');
-        }
-      }, 'image/png');
+      const file = new File([blob], `GymTracker-Resumo-${selectedReport.startTime.split('T')[0]}.png`, { type: 'image/png' });
+
+      // Usa a Web Share API do navegador
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Meu Treino no GymTracker 💪',
+          text: 'Olha o resumo do meu treino de hoje! Gerado pelo GymTracker.',
+        });
+      } else {
+        alert('Seu navegador não suporta compartilhamento direto de imagem. Tire um print da tela para compartilhar!');
+      }
     } catch (error) {
       console.error('Erro ao gerar imagem:', error);
       alert('Erro ao preparar o compartilhamento.');
