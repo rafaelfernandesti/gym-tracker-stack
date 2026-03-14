@@ -22,6 +22,7 @@ model User {
   WorkoutLog  WorkoutLog[]
   WorkoutPlan WorkoutPlan[]
   WeightLog   WeightLog[]
+  WorkoutSession WorkoutSession[]
 }
 
 model WeightLog {
@@ -75,4 +76,19 @@ model WorkoutLog {
 
   user     User     @relation(fields: [userId], references: [id])
   exercise Exercise @relation(fields: [exerciseId], references: [id])
+
+  sessionId       String?         // <-- ADICIONE ESTA LINHA
+  session         WorkoutSession? @relation(fields: [sessionId], references: [id]) // <-- ADICIONE ESTA LINHA
+}
+
+// Nova tabela para agrupar o treino do dia
+model WorkoutSession {
+  id        String       @id @default(uuid())
+  startTime DateTime     @default(now())
+  endTime   DateTime?    // Nulo enquanto o treino está rolando
+  calories  Float?       // Calculado no fim
+
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  logs      WorkoutLog[] // Séries realizadas nesta sessão
 }

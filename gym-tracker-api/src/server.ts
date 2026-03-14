@@ -313,6 +313,90 @@ app.get('/logs/frequency/:userId', async (req, res) => {
     }
 });
 
+// === ROTAS DE SESSÃO DE TREINO (RELATÓRIO) ===
+
+// 1. Iniciar um novo treino (Cria a sessão)
+app.post('/sessions/start', async (req, res) => {
+    const { userId } = req.body;
+    try {
+        // Verifica se já não tem um treino rodando (endTime nulo)
+        const activeSession = await prisma.workoutSession.findFirst({
+            where: { userId, endTime: null }
+        });
+        if (activeSession) return res.status(400).json({ error: 'Você já tem um treino em andamento.' });
+
+        const session = await prisma.workoutSession.create({
+            data: { userId }
+        });
+        res.status(201).json(session);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao iniciar treino.' });
+    }
+});
+
+// 2. Finalizar treino atual (Calcula tempo e calorias)
+app.put('/sessions/end', async (req, res) => {
+    const { userId } = req.body;
+    try {
+        const session = await prisma.workoutSession.findFirst({
+            where: { userId, endTime: null }
+        });
+        if (!session) return res.status(404).json({ error: 'Nenhuma sessão ativa encontrada.' });
+
+        const endTime = new Date();
+        const durationMin = (endTime.getTime() - session.startTime.getTime()) / (1000 * 60);
+
+        // Busca peso do usuário para calcular caloria
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        const peso = user?.pesoAtual || 70; // Default 70kg se não tiver
+
+        // Fórmula Simples: MET Musculação (aprox 5.0) * Peso * Tempo(h)
+        const caloriasEstimadas = (5.0 * peso * (durationMin / 60));
+
+        const updatedSession = await prisma.workoutSession.update({
+            where: { id: session.id },
+            data: {
+                endTime,
+                calories: Math.round(caloriasEstimadas)
+            }
+        });
+        res.json(updatedSession);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao finalizar treino.' });
+    }
+});
+
+// 3. Buscar Relatório Detalhado de um dia específico
+app.get('/reports/:userId/:date', async (req, res) => {
+    const { userId, date } = req.params; // date no formato YYYY-MM-DD
+    try {
+        const startOfDay = new Date(`${date}T00:00:00.000Z`);
+        const endOfDay = new Date(`${date}T23:59:59.999Z`);
+
+        // Busca a sessão daquele dia
+        const session = await prisma.workoutSession.findFirst({
+            where: {
+                userId,
+                startTime: { gte: startOfDay, lte: endOfDay },
+                endTime: { not: null } // Apenas treinos finalizados
+            },
+            include: {
+                logs: { // Inclui os exercícios e séries
+                    include: { exercise: true }
+                }
+            }
+        });
+
+        if (!session) return res.status(404).json({ error: 'Nenhum treino finalizado neste dia.' });
+
+        res.json(session);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao buscar relatório.' });
+    }
+});
+
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
