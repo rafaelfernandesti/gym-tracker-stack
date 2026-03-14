@@ -1,12 +1,60 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
+import bcrypt from 'bcrypt';
 
 const app = express();
 const prisma = new PrismaClient();
 
 app.use(cors()); // Permite conexões do front-end
 app.use(express.json());
+
+// ROTA: Criar nova conta
+app.post('/register', async (req, res) => {
+    const { email, senha, nome } = req.body;
+
+    try {
+        // Criptografa a senha antes de salvar
+        const hashSenha = await bcrypt.hash(senha, 10);
+
+        const user = await prisma.user.create({
+            data: {
+                email,
+                senha: hashSenha,
+                nome
+            }
+        });
+
+        // Devolve os dados (menos a senha) para o Front-end fazer o login automático
+        res.status(201).json({ id: user.id, nome: user.nome, email: user.email });
+    } catch (error) {
+        console.error("ERRO AO CRIAR USUÁRIO:", error);
+        res.status(400).json({ error: 'E-mail já cadastrado ou dados inválidos.' });
+    }
+});
+
+// ROTA: Fazer Login
+app.post('/login', async (req, res) => {
+    const { email, senha } = req.body;
+
+    try {
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            return res.status(404).json({ error: 'Usuário não encontrado.' });
+        }
+
+        // Compara a senha digitada com o hash salvo no banco
+        const senhaValida = await bcrypt.compare(senha, user.senha);
+        if (!senhaValida) {
+            return res.status(401).json({ error: 'Senha incorreta.' });
+        }
+
+        res.json({ id: user.id, nome: user.nome, email: user.email });
+    } catch (error) {
+        console.error("ERRO NO LOGIN:", error);
+        res.status(500).json({ error: 'Erro interno no servidor.' });
+    }
+});
 
 app.get('/ping', (req, res) => {
     res.json({ message: 'Gym Tracker API online e conectada ao banco!' });

@@ -8,15 +8,19 @@ datasource db {
 }
 
 model User {
-  id          String        @id @default(uuid())
-  nome        String
-  email       String        @unique
-  altura      Float?        // Em metros
-  pesoAtual   Float?        // Em kg
-  createdAt   DateTime      @default(now())
-  
-  plans       WorkoutPlan[]
-  logs        WorkoutLog[]
+  id    String  @id @default(uuid())
+  email String  @unique
+  senha String  @default("123456")
+  nome  String?
+
+  // Mantendo os seus campos originais intactos:
+  altura    Float?
+  pesoAtual Float?
+  createdAt DateTime @default(now())
+
+  // Relacionamentos:
+  WorkoutLog  WorkoutLog[]
+  WorkoutPlan WorkoutPlan[]
 }
 
 model Exercise {
@@ -24,31 +28,31 @@ model Exercise {
   nome          String
   grupoMuscular String
   equipamento   String?
-  ficha         String       @default("A")
+  ficha         String        @default("A")
   workoutItems  WorkoutItem[]
   logs          WorkoutLog[]
 }
 
 model WorkoutPlan {
-  id        String        @id @default(uuid())
-  userId    String
-  nome      String
-  ativa     Boolean       @default(true)
-  
-  user      User          @relation(fields: [userId], references: [id])
-  items     WorkoutItem[]
+  id     String  @id @default(uuid())
+  userId String
+  nome   String
+  ativa  Boolean @default(true)
+
+  user  User          @relation(fields: [userId], references: [id])
+  items WorkoutItem[]
 }
 
 model WorkoutItem {
-  id               String      @id @default(uuid())
+  id               String @id @default(uuid())
   planId           String
   exerciseId       Int
   series           Int
-  repeticoes       String      
-  descansoSegundos Int         
-  
-  plan             WorkoutPlan @relation(fields: [planId], references: [id])
-  exercise         Exercise    @relation(fields: [exerciseId], references: [id])
+  repeticoes       String
+  descansoSegundos Int
+
+  plan     WorkoutPlan @relation(fields: [planId], references: [id])
+  exercise Exercise    @relation(fields: [exerciseId], references: [id])
 }
 
 model WorkoutLog {
@@ -56,9 +60,9 @@ model WorkoutLog {
   userId     String
   exerciseId Int
   data       DateTime @default(now())
-  carga      Float    
+  carga      Float
   repsFeitas Int
-  
-  user       User     @relation(fields: [userId], references: [id])
-  exercise   Exercise @relation(fields: [exerciseId], references: [id])
+
+  user     User     @relation(fields: [userId], references: [id])
+  exercise Exercise @relation(fields: [exerciseId], references: [id])
 }
