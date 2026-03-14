@@ -12,7 +12,6 @@ function App() {
   const [authErro, setAuthErro] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
-  // Note a nova aba 'perfil' adicionada aqui
   const [activeTab, setActiveTab] = useState<'treinar' | 'historico' | 'exercicios' | 'perfil'>('treinar');
   const [exerciseId, setExerciseId] = useState('');
   const [exercises, setExercises] = useState<any[]>([]);
@@ -35,10 +34,12 @@ function App() {
   const [tempoDescanso, setTempoDescanso] = useState(90);
   const [timerAtivo, setTimerAtivo] = useState(false);
 
-  // Novos Estados para o Perfil (Peso Corporal)
   const [pesoAtualInput, setPesoAtualInput] = useState('');
   const [weightHistory, setWeightHistory] = useState<any[]>([]);
   const [statusPeso, setStatusPeso] = useState('');
+
+  // Novo Estado para o Calendário de Frequência
+  const [activeDays, setActiveDays] = useState<string[]>([]);
 
   useEffect(() => {
     const usuarioSalvo = localStorage.getItem('@GymTracker:user');
@@ -57,6 +58,7 @@ function App() {
     if (user) {
       fetchExercises();
       fetchWeightHistory();
+      fetchFrequency(); // Busca os dias de treino ao entrar
     }
   }, [user]);
 
@@ -85,13 +87,13 @@ function App() {
         localStorage.setItem('@GymTracker:user', JSON.stringify(data));
         setAuthEmail(''); setAuthSenha(''); setAuthNome('');
       } else setAuthErro(data.error || 'Erro na autenticação.');
-    } catch (error) { setAuthErro('Erro de conexão.'); }
+    } catch (error) { setAuthErro('Erro de ligação.'); }
     finally { setAuthLoading(false); }
   };
 
   const handleLogout = () => {
     localStorage.removeItem('@GymTracker:user');
-    setUser(null); setEvolutionData([]); setWeightHistory([]);
+    setUser(null); setEvolutionData([]); setWeightHistory([]); setActiveDays([]);
   };
 
   const fetchExercises = async () => {
@@ -109,7 +111,7 @@ function App() {
         const data = await response.json();
         const formattedData = data.map((log: any) => ({
           ...log,
-          dataFormatada: new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(log.data)),
+          dataFormatada: new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit' }).format(new Date(log.data)),
           volume: log.carga * log.repsFeitas
         }));
         setEvolutionData(formattedData);
@@ -117,7 +119,6 @@ function App() {
     } catch (error) { console.error(error); }
   };
 
-  // Funções de Peso Corporal
   const fetchWeightHistory = async () => {
     if (!user) return;
     try {
@@ -126,17 +127,26 @@ function App() {
         const data = await response.json();
         const formattedData = data.map((log: any) => ({
           ...log,
-          dataFormatada: new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(log.data)),
+          dataFormatada: new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit' }).format(new Date(log.data)),
         }));
         setWeightHistory(formattedData);
       }
     } catch (error) { console.error(error); }
   };
 
+  // Função para buscar o Calendário
+  const fetchFrequency = async () => {
+    if (!user) return;
+    try {
+      const response = await fetch(`${API_URL}/logs/frequency/${user.id}`);
+      if (response.ok) setActiveDays(await response.json());
+    } catch (error) { console.error(error); }
+  };
+
   const handleRegistrarPeso = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !pesoAtualInput) return;
-    setStatusPeso('Salvando...');
+    setStatusPeso('A guardar...');
     try {
       const response = await fetch(`${API_URL}/weight`, {
         method: 'POST',
@@ -144,27 +154,26 @@ function App() {
         body: JSON.stringify({ userId: user.id, peso: Number(pesoAtualInput) }),
       });
       if (response.ok) {
-        setStatusPeso('Peso atualizado! 📈');
+        setStatusPeso('Peso actualizado! 📈');
         setPesoAtualInput('');
         fetchWeightHistory();
         setTimeout(() => setStatusPeso(''), 3000);
       }
-    } catch (error) { setStatusPeso('Erro ao salvar peso.'); }
+    } catch (error) { setStatusPeso('Erro ao guardar peso.'); }
   };
 
   const handleExcluirPeso = async (logId: number) => {
-    if (!confirm('Tem certeza que deseja apagar este registro de peso?')) return;
+    if (!confirm('Tem a certeza que deseja apagar este registo de peso?')) return;
     try {
       const response = await fetch(`${API_URL}/weight/${logId}`, { method: 'DELETE' });
       if (response.ok) fetchWeightHistory();
-    } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
+    } catch (error) { alert('Erro de ligação ao tentar excluir.'); }
   };
 
-  // Restante das funções de Exercício/Treino...
   const handleRegistrarTreino = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!exerciseId || !user) return;
-    setStatus('Salvando...');
+    setStatus('A guardar...');
     try {
       const response = await fetch(`${API_URL}/logs`, {
         method: 'POST',
@@ -172,27 +181,31 @@ function App() {
         body: JSON.stringify({ userId: user.id, exerciseId: Number(exerciseId), carga: Number(carga), repsFeitas: Number(reps) }),
       });
       if (response.ok) {
-        setStatus('Série registrada! 💪');
+        setStatus('Série registada! 💪');
         setCarga(''); setReps('');
         fetchEvolution();
+        fetchFrequency(); // Actualiza o calendário imediatamente
         setTempoDescanso(90); setTimerAtivo(true);
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
         setTimeout(() => setStatus(''), 3000);
       }
-    } catch (error) { setStatus('Erro de conexão.'); }
+    } catch (error) { setStatus('Erro de ligação.'); }
   };
 
   const handleExcluirTreino = async (logId: string) => {
-    if (!confirm('Tem certeza que deseja apagar este registro?')) return;
+    if (!confirm('Tem a certeza que deseja apagar este registo?')) return;
     try {
       const response = await fetch(`${API_URL}/logs/${logId}`, { method: 'DELETE' });
-      if (response.ok) fetchEvolution();
-    } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
+      if (response.ok) {
+        fetchEvolution();
+        fetchFrequency(); // Actualiza caso tenha apagado o único treino do dia
+      }
+    } catch (error) { alert('Erro de ligação ao tentar excluir.'); }
   };
 
   const handleCriarExercicio = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatusExercicio('Salvando...');
+    setStatusExercicio('A guardar...');
     try {
       const response = await fetch(`${API_URL}/exercises`, {
         method: 'POST',
@@ -204,12 +217,12 @@ function App() {
         limparFormularioExercicio(); fetchExercises();
         setTimeout(() => setStatusExercicio(''), 3000);
       }
-    } catch (error) { setStatusExercicio('Erro ao salvar.'); }
+    } catch (error) { setStatusExercicio('Erro ao guardar.'); }
   };
 
   const handleAtualizarExercicio = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatusExercicio('Atualizando...');
+    setStatusExercicio('A actualizar...');
     try {
       const response = await fetch(`${API_URL}/exercises/${editingExId}`, {
         method: 'PUT',
@@ -217,22 +230,22 @@ function App() {
         body: JSON.stringify({ nome: novoNome, grupoMuscular: novoGrupo, ficha: novaFicha }),
       });
       if (response.ok) {
-        setStatusExercicio('Exercício atualizado! ✅');
+        setStatusExercicio('Exercício actualizado! ✅');
         limparFormularioExercicio(); fetchExercises();
         setTimeout(() => setStatusExercicio(''), 3000);
       }
-    } catch (error) { setStatusExercicio('Erro ao atualizar.'); }
+    } catch (error) { setStatusExercicio('Erro ao actualizar.'); }
   };
 
   const handleExcluirExercicio = async (exId: number, nome: string) => {
-    if (!confirm(`CUIDADO! Apagar "${nome}" deleta todo o histórico dele. Certeza?`)) return;
+    if (!confirm(`CUIDADO! Apagar "${nome}" elimina todo o histórico associado. Tem a certeza?`)) return;
     try {
       const response = await fetch(`${API_URL}/exercises/${exId}`, { method: 'DELETE' });
       if (response.ok) {
         fetchExercises();
         if (exerciseId === exId.toString()) setExerciseId('');
       }
-    } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
+    } catch (error) { alert('Erro de ligação ao tentar excluir.'); }
   };
 
   const iniciarEdicao = (ex: any) => {
@@ -250,18 +263,24 @@ function App() {
   const gruposMuscularesLista = ['Todos', 'Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'];
   const exerciciosExibidos = filtroGrupoEx === 'Todos' ? exercises : exercises.filter(ex => ex.grupoMuscular === filtroGrupoEx);
 
+  // Gera um array com os últimos 30 dias a partir de hoje
+  const last30Days = Array.from({ length: 30 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (29 - i));
+    return d.toISOString().split('T')[0];
+  });
+
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col justify-center items-center p-4 font-sans text-white">
-        {/* Tela de Login inalterada */}
         <div className="w-full max-w-md bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700">
           <h1 className="text-4xl font-black text-center text-blue-500 tracking-tight mb-2">GYM<span className="text-white">TRACKER</span></h1>
-          <p className="text-center text-gray-400 mb-8 font-medium">{isLoginModo ? 'Acesse seus treinos' : 'Crie sua conta'}</p>
+          <p className="text-center text-gray-400 mb-8 font-medium">{isLoginModo ? 'Aceda aos seus treinos' : 'Crie a sua conta'}</p>
           <form onSubmit={handleAuth} className="space-y-4">
             {!isLoginModo && (
               <div>
                 <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Nome (Opcional)</label>
-                <input type="text" value={authNome} onChange={(e) => setAuthNome(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="Seu nome" />
+                <input type="text" value={authNome} onChange={(e) => setAuthNome(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="O seu nome" />
               </div>
             )}
             <div>
@@ -274,12 +293,12 @@ function App() {
             </div>
             {authErro && <p className="text-red-400 text-sm text-center font-medium">{authErro}</p>}
             <button type="submit" disabled={authLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50 mt-2">
-              {authLoading ? 'AGUARDE...' : (isLoginModo ? 'ENTRAR' : 'CADASTRAR')}
+              {authLoading ? 'AGUARDE...' : (isLoginModo ? 'ENTRAR' : 'REGISTAR')}
             </button>
           </form>
           <div className="mt-6 text-center">
             <button onClick={() => { setIsLoginModo(!isLoginModo); setAuthErro(''); }} className="text-gray-400 hover:text-white text-sm font-medium transition-colors">
-              {isLoginModo ? 'Não tem uma conta? Crie agora' : 'Já tem uma conta? Faça login'}
+              {isLoginModo ? 'Não tem uma conta? Crie agora' : 'Já tem uma conta? Inicie sessão'}
             </button>
           </div>
         </div>
@@ -303,7 +322,6 @@ function App() {
         </div>
       </header>
 
-      {/* Menu com a nova aba Perfil */}
       <div className="max-w-md mx-auto flex bg-gray-800 rounded-lg p-1 mb-6 text-xs font-bold overflow-x-auto scrollbar-hide">
         <button onClick={() => setActiveTab('treinar')} className={`flex-1 min-w-[80px] py-2.5 rounded-md transition-all ${activeTab === 'treinar' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Treinar</button>
         <button onClick={() => setActiveTab('historico')} className={`flex-1 min-w-[80px] py-2.5 rounded-md transition-all ${activeTab === 'historico' ? 'bg-blue-600 text-white shadow' : 'text-gray-400'}`}>Evolução</button>
@@ -313,28 +331,36 @@ function App() {
 
       <main className="max-w-md mx-auto">
 
-        {/* === ABA PERFIL (PESO CORPORAL) === */}
         {activeTab === 'perfil' && (
           <div className="animate-in fade-in space-y-6">
+
+            {/* NOVO: Calendário de Frequência */}
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
-              <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Registrar Peso Corporal</h3>
+              <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Frequência (Últimos 30 Dias)</h3>
+              <div className="flex flex-wrap gap-2 justify-start">
+                {last30Days.map((day) => {
+                  const treinou = activeDays.includes(day);
+                  return (
+                    <div
+                      key={day}
+                      className={`w-[13.5%] aspect-square rounded-md transition-all duration-300 ${treinou ? 'bg-green-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-gray-900 border border-gray-700'}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
+              <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Registar Peso Corporal</h3>
               <form onSubmit={handleRegistrarPeso} className="flex gap-3">
-                <input
-                  type="number" step="0.1" required value={pesoAtualInput} onChange={(e) => setPesoAtualInput(e.target.value)}
-                  placeholder="Ex: 75.5"
-                  className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-6 rounded-xl transition-all">
-                  SALVAR
-                </button>
+                <input type="number" step="0.1" required value={pesoAtualInput} onChange={(e) => setPesoAtualInput(e.target.value)} placeholder="Ex: 75.5" className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" />
+                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-6 rounded-xl transition-all">SALVAR</button>
               </form>
               {statusPeso && <div className="mt-4 text-center text-green-400 font-medium">{statusPeso}</div>}
             </div>
 
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 h-80">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-gray-300 text-sm uppercase font-bold">Ganho de Massa</h3>
-              </div>
+              <div className="flex justify-between items-center mb-6"><h3 className="text-gray-300 text-sm uppercase font-bold">Ganho de Massa</h3></div>
               <ResponsiveContainer width="100%" height="85%">
                 <LineChart data={weightHistory}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
@@ -365,7 +391,6 @@ function App() {
           </div>
         )}
 
-        {/* ... (O restante do código das outras abas permanece idêntico à versão anterior) ... */}
         {activeTab === 'treinar' && (
           <div className="animate-in fade-in space-y-6">
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
@@ -374,7 +399,6 @@ function App() {
                   <button key={ficha} onClick={() => setFichaAtiva(ficha)} className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all border ${fichaAtiva === ficha ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-400'}`}>Ficha {ficha}</button>
                 ))}
               </div>
-
               <form onSubmit={handleRegistrarTreino} className="space-y-5">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Exercício</label>
@@ -398,7 +422,7 @@ function App() {
                     <input type="number" required disabled={!exerciseId} value={reps} onChange={(e) => setReps(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
                   </div>
                 </div>
-                <button type="submit" disabled={!exerciseId} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50">REGISTRAR SÉRIE</button>
+                <button type="submit" disabled={!exerciseId} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50">REGISTAR SÉRIE</button>
               </form>
               {status && <div className="mt-4 text-center text-green-400 font-medium">{status}</div>}
             </div>
@@ -452,7 +476,7 @@ function App() {
 
             {evolutionData.length > 0 && (
               <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
-                <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Registros Recentes</h3>
+                <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Registos Recentes</h3>
                 <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
                   {[...evolutionData].reverse().map((log) => (
                     <div key={log.id} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700">
@@ -472,7 +496,7 @@ function App() {
         {activeTab === 'exercicios' && (
           <div className="space-y-6 animate-in fade-in">
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
-              <h3 className="text-gray-400 text-sm mb-4 uppercase font-bold">{editingExId ? 'Editar Exercício' : 'Cadastrar Novo'}</h3>
+              <h3 className="text-gray-400 text-sm mb-4 uppercase font-bold">{editingExId ? 'Editar Exercício' : 'Registar Novo'}</h3>
               <form onSubmit={editingExId ? handleAtualizarExercicio : handleCriarExercicio} className="space-y-5">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Nome</label>
