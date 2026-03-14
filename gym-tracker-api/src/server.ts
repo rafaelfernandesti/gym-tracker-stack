@@ -179,6 +179,29 @@ app.put('/exercises/:id', async (req, res) => {
         res.status(500).json({ error: 'Erro ao atualizar o exercício.' });
     }
 });
+
+// Rota para excluir um exercício e todo o seu histórico
+app.delete('/exercises/:id', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        // 1º passo: Apaga todo o histórico de treinos desse exercício
+        await prisma.workoutLog.deleteMany({
+            where: { exerciseId: Number(id) }
+        });
+
+        // 2º passo: Apaga o exercício
+        await prisma.exercise.delete({
+            where: { id: Number(id) }
+        });
+
+        res.json({ message: 'Exercício e histórico excluídos com sucesso' });
+    } catch (error) {
+        console.error("ERRO AO EXCLUIR EXERCÍCIO:", error);
+        res.status(500).json({ error: 'Erro ao excluir o exercício.' });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
