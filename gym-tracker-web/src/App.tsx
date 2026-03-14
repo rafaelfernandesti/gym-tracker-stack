@@ -4,8 +4,8 @@ import { toBlob } from 'html-to-image';
 
 const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
-// Componente do Modal do Relatório (O "Printável") - Versão com Mapa Muscular
-function ReportModal({ sessionData, onClose, onShare }: { sessionData: any, onClose: () => void, onShare: () => void }) {
+// Componente do Modal do Relatório (Versão à Prova de Falhas)
+function ReportModal({ sessionData, allExercises, onClose, onShare }: { sessionData: any, allExercises: any[], onClose: () => void, onShare: () => void }) {
   const reportRef = useRef<HTMLDivElement>(null);
 
   if (!sessionData) return null;
@@ -14,44 +14,42 @@ function ReportModal({ sessionData, onClose, onShare }: { sessionData: any, onCl
   const endTime = new Date(sessionData.endTime);
   const durationMin = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
 
-  // Agrupa os logs por exercício (necessário para calcular Melhor Carga)
   const exercisesMap: any = {};
-  const musculosTrabalhados = new Set<string>(); // Usa Set para não repetir nomes
+  const musculosTrabalhados = new Set<string>();
 
   sessionData.logs.forEach((log: any) => {
-    const exNome = log.exercise.nome;
-    const grupo = log.exercise.grupoMuscular; // Pega o grupo
+    // Tenta pegar do log da API. Se falhar, busca na lista global do App!
+    const exerciseData = log.exercise || allExercises.find(ex => ex.id === log.exerciseId);
+
+    const exNome = exerciseData?.nome || 'Exercício Desconhecido';
+    const grupo = exerciseData?.grupoMuscular;
 
     if (!exercisesMap[exNome]) exercisesMap[exNome] = [];
     exercisesMap[exNome].push(log);
 
-    if (grupo) musculosTrabalhados.add(grupo); // Adiciona grupo na lista
+    if (grupo && grupo.trim() !== '') musculosTrabalhados.add(grupo);
   });
 
   const dataFormatada = startTime.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
   const horaInicio = startTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-  // Lista de músculos para exibir em texto
   const listaMusculos = Array.from(musculosTrabalhados).join(', ');
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in overflow-y-auto scrollbar-hide">
 
-      {/* Área que será printada */}
       <div ref={reportRef} id="report-card" className="w-full max-w-sm bg-gray-950 p-6 rounded-3xl border-4 border-blue-600 shadow-2xl text-white font-sans">
 
-        <header className="text-center mb-6 border-b border-gray-800 pb-4 relative">
+        <header className="text-center mb-6 border-b border-gray-800 pb-4">
           <h1 className="text-2xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
           <p className="text-xs text-gray-400 uppercase font-bold tracking-widest mt-1">Resumo de Conquista</p>
         </header>
 
-        {/* Informações Principais */}
         <div className="text-center mb-6">
           <p className="text-sm font-medium text-gray-300 capitalize">{dataFormatada}</p>
           <p className="text-xs text-gray-500">Início: {horaInicio}</p>
         </div>
 
-        {/* Métricas Principais */}
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="bg-gray-800 p-4 rounded-xl text-center border border-gray-700">
             <p className="text-gray-500 text-xs font-bold uppercase">Duração</p>
@@ -63,27 +61,22 @@ function ReportModal({ sessionData, onClose, onShare }: { sessionData: any, onCl
           </div>
         </div>
 
-        {/* === NOVA SEÇÃO: MAPA MUSCULAR === */}
-        <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl mb-6 relative overflow-hidden">
-          <div className="flex items-center gap-4">
-            {/* Imagem estática do corpo humano */}
-            <img
-              src="https://raw.githubusercontent.com/TiagoGouvea/muscle-map-image/main/muscle-map-front-back.png"
-              alt="Mapa Muscular"
-              className="w-16 h-auto opacity-70"
-            />
-
-            {/* Texto com os grupos trabalhados */}
-            <div className="flex-1">
-              <h3 className="text-gray-300 text-xs font-bold uppercase tracking-wider mb-2">Foco Muscular</h3>
-              <p className="text-sm text-white font-medium">
-                {listaMusculos || 'Músculos não registrados'}
-              </p>
-            </div>
+        {/* MAPA MUSCULAR COM SVG INLINE (NUNCA QUEBRA) */}
+        <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl mb-6 flex items-center gap-4 relative overflow-hidden">
+          <div className="w-14 h-14 bg-gray-800 rounded-full flex items-center justify-center border border-gray-700 shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-blue-500">
+              <path d="M12 2a2.5 2.5 0 100 5 2.5 2.5 0 000-5zM5.5 8.5a1.5 1.5 0 00-1.5 1.5v3.5a1.5 1.5 0 003 0v-2.11c1.33 1.14 3 1.86 5 1.86s3.67-.72 5-1.86v2.11a1.5 1.5 0 003 0V10a1.5 1.5 0 00-1.5-1.5h-13z" />
+              <path d="M9 13v8a2 2 0 004 0v-5h2v5a2 2 0 004 0v-8c-1.63 1.25-3.66 2-5.5 2h-1c-1.84 0-3.87-.75-5.5-2z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Foco Muscular</h3>
+            <p className="text-sm text-white font-bold leading-tight">
+              {listaMusculos || 'Músculos não registrados'}
+            </p>
           </div>
         </div>
 
-        {/* Seção de Exercícios (Compactada) */}
         <div className="space-y-3 mb-6 border-t border-gray-800 pt-4">
           <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Detalhamento</h3>
           {Object.keys(exercisesMap).map(exNome => {
@@ -106,14 +99,9 @@ function ReportModal({ sessionData, onClose, onShare }: { sessionData: any, onCl
         </footer>
       </div>
 
-      {/* Botões de Ação (Fora da área de print) */}
       <div className="flex gap-3 mt-6 w-full max-w-sm mb-4">
-        <button onClick={onClose} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl transition-all text-sm">
-          FECHAR
-        </button>
-        <button onClick={onShare} className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2">
-          COMPARTILHAR
-        </button>
+        <button onClick={onClose} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl transition-all text-sm">FECHAR</button>
+        <button onClick={onShare} className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2">COMPARTILHAR</button>
       </div>
     </div>
   );
@@ -397,6 +385,7 @@ function App() {
       {selectedReport && (
         <ReportModal
           sessionData={selectedReport}
+          allExercises={exercises}
           onClose={() => setSelectedReport(null)}
           onShare={handleShareReport}
         />
