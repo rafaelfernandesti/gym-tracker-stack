@@ -17,14 +17,36 @@ function App() {
   const [status, setStatus] = useState('');
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
 
-  // Estados do Cadastro/Edição de Exercícios
+  // Estados do Gerenciamento de Exercícios
   const [novoNome, setNovoNome] = useState('');
   const [novoGrupo, setNovoGrupo] = useState('Peito');
   const [novaFicha, setNovaFicha] = useState('A'); 
   const [statusExercicio, setStatusExercicio] = useState('');
-  
-  // Controle de Edição
   const [editingExId, setEditingExId] = useState<number | null>(null);
+
+  // Estados do Cronômetro
+  const [tempoDescanso, setTempoDescanso] = useState(90); // Padrão de 90s
+  const [timerAtivo, setTimerAtivo] = useState(false);
+
+  // Efeito do Cronômetro
+  useEffect(() => {
+    let intervalo: ReturnType<typeof setInterval>;
+    if (timerAtivo && tempoDescanso > 0) {
+      intervalo = setInterval(() => {
+        setTempoDescanso((t) => t - 1);
+      }, 1000);
+    } else if (tempoDescanso === 0 && timerAtivo) {
+      setTimerAtivo(false);
+      // Aqui você poderia colocar um aviso sonoro no futuro
+    }
+    return () => clearInterval(intervalo);
+  }, [timerAtivo, tempoDescanso]);
+
+  const formatarTempo = (segundos: number) => {
+    const m = Math.floor(segundos / 60).toString().padStart(2, '0');
+    const s = (segundos % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
   const fetchExercises = async () => {
     try {
@@ -85,6 +107,12 @@ function App() {
         setStatus('Série registrada! 💪');
         setCarga(''); setReps('');
         fetchEvolution();
+        
+        // Dispara o cronômetro automaticamente
+        setTempoDescanso(90);
+        setTimerAtivo(true);
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+
         setTimeout(() => setStatus(''), 3000);
       }
     } catch (error) { setStatus('Erro de conexão.'); }
@@ -137,6 +165,17 @@ function App() {
     } catch (error) { setStatusExercicio('Erro ao atualizar.'); }
   };
 
+  const handleExcluirExercicio = async (exId: number, nome: string) => {
+    if (!confirm(`CUIDADO! Isso vai apagar o exercício "${nome}" e TODO o histórico de treino dele. Tem certeza absoluta?`)) return;
+    try {
+      const response = await fetch(`${API_URL}/exercises/${exId}`, { method: 'DELETE' });
+      if (response.ok) {
+        fetchExercises();
+        if (exerciseId === exId.toString()) setExerciseId(''); 
+      } else { alert('Erro ao excluir o exercício.'); }
+    } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
+  };
+
   const iniciarEdicao = (ex: any) => {
     setEditingExId(ex.id);
     setNovoNome(ex.nome);
@@ -169,48 +208,65 @@ function App() {
 
       <main className="max-w-md mx-auto">
         {activeTab === 'treinar' && (
-          <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 animate-in fade-in">
-            <div className="flex gap-2 mb-6">
-              {['A', 'B', 'C'].map(ficha => (
-                <button 
-                  key={ficha}
-                  onClick={() => setFichaAtiva(ficha)}
-                  className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all border ${fichaAtiva === ficha ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-400'}`}
-                >
-                  Ficha {ficha}
-                </button>
-              ))}
+          <div className="animate-in fade-in space-y-6">
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
+              <div className="flex gap-2 mb-6">
+                {['A', 'B', 'C'].map(ficha => (
+                  <button key={ficha} onClick={() => setFichaAtiva(ficha)} className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all border ${fichaAtiva === ficha ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-400'}`}>Ficha {ficha}</button>
+                ))}
+              </div>
+
+              <form onSubmit={handleRegistrarTreino} className="space-y-5">
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Exercício</label>
+                  {exerciciosFiltrados.length > 0 ? (
+                    <select value={exerciseId} onChange={(e) => setExerciseId(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                      {exerciciosFiltrados.map(ex => (
+                        <option key={ex.id} value={ex.id}>{ex.nome}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-gray-500 text-sm text-center">Nenhum exercício cadastrado nesta ficha.</div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Carga (kg)</label>
+                    <input type="number" step="0.5" required disabled={!exerciseId} value={carga} onChange={(e) => setCarga(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Reps</label>
+                    <input type="number" required disabled={!exerciseId} value={reps} onChange={(e) => setReps(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
+                  </div>
+                </div>
+                <button type="submit" disabled={!exerciseId} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50">REGISTRAR SÉRIE</button>
+              </form>
+              {status && <div className="mt-4 text-center text-green-400 font-medium">{status}</div>}
             </div>
 
-            <form onSubmit={handleRegistrarTreino} className="space-y-5">
-              <div>
-                <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Exercício</label>
-                {exerciciosFiltrados.length > 0 ? (
-                  <select value={exerciseId} onChange={(e) => setExerciseId(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-blue-500 outline-none">
-                    {exerciciosFiltrados.map(ex => (
-                      <option key={ex.id} value={ex.id}>{ex.nome}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-gray-500 text-sm text-center">Nenhum exercício cadastrado nesta ficha.</div>
-                )}
+            {/* Painel do Cronômetro */}
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 text-center">
+              <h3 className="text-gray-400 text-xs font-bold uppercase mb-2">Tempo de Descanso</h3>
+              <div className={`text-5xl font-black mb-6 ${timerAtivo ? 'text-blue-400' : 'text-gray-300'}`}>
+                {formatarTempo(tempoDescanso)}
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Carga (kg)</label>
-                  <input type="number" step="0.5" required disabled={!exerciseId} value={carga} onChange={(e) => setCarga(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Reps</label>
-                  <input type="number" required disabled={!exerciseId} value={reps} onChange={(e) => setReps(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
-                </div>
+              <div className="flex justify-center gap-3">
+                <button onClick={() => setTempoDescanso(t => Math.max(0, t - 15))} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">-15s</button>
+                <button 
+                  onClick={() => setTimerAtivo(!timerAtivo)} 
+                  className={`${timerAtivo ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-500'} text-white font-bold py-2 px-6 rounded-lg w-32`}
+                >
+                  {timerAtivo ? 'PAUSAR' : 'INICIAR'}
+                </button>
+                <button onClick={() => { setTimerAtivo(false); setTempoDescanso(90); }} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">ZERAR</button>
+                <button onClick={() => setTempoDescanso(t => t + 15)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">+15s</button>
               </div>
-              <button type="submit" disabled={!exerciseId} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50">REGISTRAR SÉRIE</button>
-            </form>
-            {status && <div className="mt-4 text-center text-green-400 font-medium">{status}</div>}
+            </div>
+
           </div>
         )}
 
+        {/* ... (O resto das abas histórico e exercícios permanecem inalteradas) ... */}
         {activeTab === 'historico' && (
           <div className="animate-in fade-in space-y-4">
             <div className="flex gap-4">
@@ -239,11 +295,7 @@ function App() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                   <XAxis dataKey="dataFormatada" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} width={30} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px' }}
-                    formatter={(value: any, name: any) => [value + ' kg', name === 'carga' ? 'Carga' : name]}
-                    labelStyle={{ color: '#9CA3AF', marginBottom: '4px' }}
-                  />
+                  <Tooltip contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px' }} formatter={(value: any, name: any) => [value + ' kg', name === 'carga' ? 'Carga' : name]} labelStyle={{ color: '#9CA3AF', marginBottom: '4px' }} />
                   <Line type="monotone" dataKey="carga" stroke="#3B82F6" strokeWidth={4} dot={{ r: 5, fill: '#3B82F6', strokeWidth: 0 }} activeDot={{ r: 8 }} />
                 </LineChart>
               </ResponsiveContainer>
@@ -270,7 +322,6 @@ function App() {
 
         {activeTab === 'exercicios' && (
           <div className="space-y-6 animate-in fade-in">
-            {/* Formulário de Cadastro e Edição */}
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
               <h3 className="text-gray-400 text-sm mb-4 uppercase font-bold">
                 {editingExId ? 'Editar Exercício' : 'Cadastrar Novo Exercício'}
@@ -284,26 +335,19 @@ function App() {
                   <div>
                     <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Ficha</label>
                     <select value={novaFicha} onChange={(e) => setNovaFicha(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="A">A</option>
-                      <option value="B">B</option>
-                      <option value="C">C</option>
+                      <option value="A">A</option><option value="B">B</option><option value="C">C</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold uppercase text-gray-500 mb-2">Grupo</label>
                     <select value={novoGrupo} onChange={(e) => setNovoGrupo(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="Peito">Peito</option>
-                      <option value="Costas">Costas</option>
-                      <option value="Pernas">Pernas</option>
-                      <option value="Ombros">Ombros</option>
-                      <option value="Braços">Braços</option>
-                      <option value="Core">Core</option>
+                      <option value="Peito">Peito</option><option value="Costas">Costas</option><option value="Pernas">Pernas</option><option value="Ombros">Ombros</option><option value="Braços">Braços</option><option value="Core">Core</option>
                     </select>
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all">
-                    {editingExId ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR'}
+                    {editingExId ? 'SALVAR' : 'CADASTRAR'}
                   </button>
                   {editingExId && (
                     <button type="button" onClick={limparFormularioExercicio} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-xl transition-all">
@@ -315,7 +359,6 @@ function App() {
               {statusExercicio && <div className="mt-4 text-center text-green-400 font-medium">{statusExercicio}</div>}
             </div>
 
-            {/* Lista de Exercícios Cadastrados */}
             <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700">
               <h3 className="text-gray-300 text-sm uppercase font-bold mb-4">Meus Exercícios</h3>
               <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
@@ -325,17 +368,14 @@ function App() {
                       <p className="text-sm font-bold text-white">{ex.nome}</p>
                       <p className="text-xs text-gray-500">Ficha {ex.ficha || 'A'} • {ex.grupoMuscular}</p>
                     </div>
-                    <button 
-                      onClick={() => iniciarEdicao(ex)}
-                      className="text-blue-400 hover:text-blue-300 p-2 text-xs font-bold uppercase tracking-wider"
-                    >
-                      Editar
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={() => iniciarEdicao(ex)} className="text-blue-400 hover:text-blue-300 p-2 text-xs font-bold uppercase tracking-wider">Editar</button>
+                      <button onClick={() => handleExcluirExercicio(ex.id, ex.nome)} className="text-red-400 hover:text-red-300 p-2 text-xs font-bold uppercase tracking-wider">Excluir</button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-
           </div>
         )}
       </main>
