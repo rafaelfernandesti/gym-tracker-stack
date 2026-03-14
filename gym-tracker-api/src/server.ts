@@ -386,30 +386,27 @@ app.delete('/sessions/:id', async (req, res) => {
         res.status(500).json({ error: 'Erro ao excluir a sessão.' });
     }
 });
-// 3. Buscar Relatório Detalhado de um dia específico
+// 3. Buscar Relatório Detalhado de um dia específico (AGORA SUPORTA MÚLTIPLOS)
 app.get('/reports/:userId/:date', async (req, res) => {
     const { userId, date } = req.params; // date no formato YYYY-MM-DD
     try {
         const startOfDay = new Date(`${date}T00:00:00.000Z`);
         const endOfDay = new Date(`${date}T23:59:59.999Z`);
 
-        // Busca a sessão daquele dia
-        const session = await prisma.workoutSession.findFirst({
+        // Busca TODAS as sessões finalizadas daquele dia
+        const sessions = await prisma.workoutSession.findMany({
             where: {
                 userId,
                 startTime: { gte: startOfDay, lte: endOfDay },
-                endTime: { not: null } // Apenas treinos finalizados
+                endTime: { not: null }
             },
             include: {
-                logs: { // Inclui os exercícios e séries
-                    include: { exercise: true }
-                }
-            }
+                logs: { include: { exercise: true } }
+            },
+            orderBy: { startTime: 'asc' } // Ordena do mais cedo para o mais tarde
         });
 
-        if (!session) return res.status(404).json({ error: 'Nenhum treino finalizado neste dia.' });
-
-        res.json(session);
+        res.json(sessions); // Retorna a lista de sessões
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Erro ao buscar relatório.' });
