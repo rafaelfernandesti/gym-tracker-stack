@@ -155,6 +155,7 @@ function App() {
   const [activeSession, setActiveSession] = useState<any>(null); // Treino rolando agora
   const [selectedReport, setSelectedReport] = useState<any>(null); // Dados do modal
   const [loadingReport, setLoadingReport] = useState(false);
+  const [daySessions, setDaySessions] = useState<any[] | null>(null); // Guarda múltiplos treinos do dia
 
   // === EFEITOS ===
   useEffect(() => {
@@ -220,15 +221,24 @@ function App() {
   const fetchFrequency = async () => { /* ... */ if (!user) return; try { const response = await fetch(`${API_URL}/logs/frequency/${user.id}`); if (response.ok) setActiveDays(await response.json()); } catch (error) { console.error(error); } };
 
   // === NOVA FUNÇÃO: CLICAR NO CALENDÁRIO ===
+  // === NOVA FUNÇÃO: CLICAR NO CALENDÁRIO (MÚLTIPLOS TREINOS) ===
   const handleDayClick = async (date: string) => {
     if (!user || loadingReport) return;
     setLoadingReport(true);
     try {
       const response = await fetch(`${API_URL}/reports/${user.id}/${date}`);
       if (response.ok) {
-        setSelectedReport(await response.json());
-      } else {
-        alert('Nenhum resumo de treino finalizado encontrado para este dia.');
+        const sessions = await response.json();
+
+        if (sessions.length === 0) {
+          alert('Nenhum resumo de treino finalizado encontrado para este dia.');
+        } else if (sessions.length === 1) {
+          // Se só tem 1 treino, abre direto o relatório
+          setSelectedReport(sessions[0]);
+        } else {
+          // Se tem mais de 1, abre o modal de seleção
+          setDaySessions(sessions);
+        }
       }
     } catch (error) {
       alert('Erro ao buscar o relatório.');
@@ -404,6 +414,38 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 font-sans pb-10">
+      {/* Modal de Seleção de Treino (Abre se houver > 1 treino no dia) */}
+      {daySessions && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in">
+          <div className="w-full max-w-sm bg-gray-900 p-6 rounded-3xl border border-gray-700 shadow-2xl text-white">
+            <h3 className="text-lg font-bold mb-4 text-center text-blue-400 uppercase tracking-widest">Treinos do Dia</h3>
+            <p className="text-xs text-gray-400 text-center mb-6">Você treinou mais de uma vez neste dia. Qual relatório deseja visualizar?</p>
+
+            <div className="space-y-3">
+              {daySessions.map((session, index) => (
+                <button
+                  key={session.id}
+                  onClick={() => {
+                    setSelectedReport(session); // Abre o relatório escolhido
+                    setDaySessions(null); // Fecha este modal
+                  }}
+                  className="w-full bg-gray-800 hover:bg-gray-700 p-4 rounded-xl flex justify-between items-center transition-colors border border-gray-700"
+                >
+                  <span className="font-bold">Sessão {index + 1}</span>
+                  <span className="text-sm text-gray-400 bg-gray-900 px-3 py-1 rounded-lg">
+                    {new Date(session.startTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <button onClick={() => setDaySessions(null)} className="w-full mt-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl transition-all text-sm">
+              CANCELAR
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Modal do Relatório (Abre quando selecionado) */}
       {selectedReport && (
         <ReportModal
