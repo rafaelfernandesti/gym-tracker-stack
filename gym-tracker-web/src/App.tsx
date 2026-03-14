@@ -5,7 +5,7 @@ import { toBlob } from 'html-to-image';
 const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
 // Componente do Modal do Relatório (Versão à Prova de Falhas)
-function ReportModal({ sessionData, allExercises, onClose, onShare }: { sessionData: any, allExercises: any[], onClose: () => void, onShare: () => void }) {
+function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: { sessionData: any, allExercises: any[], onClose: () => void, onShare: () => void, onDelete: () => void }) {
   const reportRef = useRef<HTMLDivElement>(null);
 
   if (!sessionData) return null;
@@ -99,10 +99,16 @@ function ReportModal({ sessionData, allExercises, onClose, onShare }: { sessionD
         </footer>
       </div>
 
+      {/* Botões de Ação (Substitua a div final de botões por este bloco) */}
       <div className="flex gap-3 mt-6 w-full max-w-sm mb-4">
         <button onClick={onClose} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl transition-all text-sm">FECHAR</button>
         <button onClick={onShare} className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2">COMPARTILHAR</button>
       </div>
+
+      {/* Novo Botão de Excluir */}
+      <button onClick={onDelete} className="text-red-500 hover:text-red-400 text-xs font-bold uppercase tracking-wider mb-2 transition-colors">
+        EXCLUIR ESTA SESSÃO
+      </button>
     </div>
   );
 }
@@ -259,7 +265,6 @@ function App() {
     } catch (error) { alert('Erro de conexão ao tentar excluir.'); }
   };
 
-  // === NOVA FUNÇÃO: COMPARTILHAR RELATÓRIO (HTML -> Imagem -> Share) ===
   // === NOVA FUNÇÃO: COMPARTILHAR RELATÓRIO (USANDO HTML-TO-IMAGE) ===
   const handleShareReport = async () => {
     const card = document.getElementById('report-card');
@@ -289,6 +294,24 @@ function App() {
     } catch (error) {
       console.error('Erro ao gerar imagem:', error);
       alert('Erro ao preparar o compartilhamento.');
+    }
+  };
+
+  // === NOVA FUNÇÃO: EXCLUIR SESSÃO ===
+  const handleExcluirSessao = async (sessionId: string) => {
+    if (!confirm('CUIDADO! Tem certeza que deseja apagar este treino completo e TODAS as séries registradas nele?')) return;
+
+    try {
+      const response = await fetch(`${API_URL}/sessions/${sessionId}`, { method: 'DELETE' });
+      if (response.ok) {
+        setSelectedReport(null); // Fecha o modal
+        fetchFrequency(); // Atualiza o calendário (o dia vai perder a cor verde)
+        fetchEvolution(); // Atualiza o gráfico principal
+      } else {
+        alert('Erro ao excluir a sessão.');
+      }
+    } catch (error) {
+      alert('Erro de conexão ao tentar excluir.');
     }
   };
 
@@ -388,6 +411,7 @@ function App() {
           allExercises={exercises}
           onClose={() => setSelectedReport(null)}
           onShare={handleShareReport}
+          onDelete={() => handleExcluirSessao(selectedReport.id)}
         />
       )}
 
