@@ -86,25 +86,33 @@ async function main() {
     { nome: 'Roda Abdominal', grupoMuscular: 'Core' }
   ];
 
-  console.log('Limpando a biblioteca global antiga...');
-  // Apaga apenas os exercícios que não pertencem a nenhum usuário (Globais)
-  await prisma.exercise.deleteMany({
+  console.log('Analisando biblioteca atual...');
+  
+  // 1. Busca o que já existe no banco (para não duplicar)
+  const exerciciosAtuais = await prisma.exercise.findMany({
     where: { userId: null }
   });
+  const nomesAtuais = new Set(exerciciosAtuais.map(e => e.nome));
 
-  console.log('Injetando nova biblioteca completa de exercícios...');
+  let adicionados = 0;
 
+  console.log('Injetando novos exercícios...');
+
+  // 2. Cria apenas os que ainda não estão no banco
   for (const ex of exerciciosGlobais) {
-    await prisma.exercise.create({
-      data: { 
-        nome: ex.nome, 
-        grupoMuscular: ex.grupoMuscular, 
-        userId: null 
-      },
-    });
+    if (!nomesAtuais.has(ex.nome)) {
+      await prisma.exercise.create({
+        data: { 
+          nome: ex.nome, 
+          grupoMuscular: ex.grupoMuscular, 
+          userId: null 
+        },
+      });
+      adicionados++;
+    }
   }
   
-  console.log(`Biblioteca atualizada com sucesso! ${exerciciosGlobais.length} exercícios adicionados.`);
+  console.log(`Processo finalizado! ${adicionados} novos exercícios adicionados à biblioteca global.`);
 }
 
 main()

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { toBlob } from 'html-to-image';
 
-const API_URL = "https://gym-tracker-api-yomc.onrender.com";
+const API_URL = "https://gym-tracker-api-yomc.onrender.com"; 
 
 // --- COMPONENTE DO RELATÓRIO PRINTÁVEL ---
 function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: any) {
@@ -12,10 +12,11 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
   const startTime = new Date(sessionData.startTime);
   const endTime = new Date(sessionData.endTime);
   const durationMin = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
-
+  
   const exercisesMap: any = {};
   const musculosTrabalhados = new Set<string>();
 
+  // Corrige a leitura caso os logs venham do cache local (repsFeitas vs reps)
   sessionData.logs.forEach((log: any) => {
     const exerciseData = log.exercise || allExercises.find((ex: any) => ex.id === log.exerciseId);
     const exNome = exerciseData?.nome || 'Exercício';
@@ -39,7 +40,7 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
           </div>
           <div className="bg-gray-800 p-4 rounded-xl text-center border border-gray-700">
             <p className="text-gray-500 text-[10px] uppercase font-bold">Queima Est.</p>
-            <p className="text-xl font-black text-green-400">{sessionData.calories} kcal</p>
+            <p className="text-xl font-black text-green-400">{sessionData.calories || Math.round(durationMin * 6.5)} kcal</p>
           </div>
         </div>
         <div className="bg-gray-950 p-3 rounded-xl mb-4 border border-gray-800 text-center">
@@ -70,7 +71,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'treinar' | 'fichas' | 'evolucao' | 'perfil'>('treinar');
   const [fichaAtiva, setFichaAtiva] = useState('A');
 
-  // Dados
+  // Dados Globais
   const [library, setLibrary] = useState<any[]>([]);
   const [myPlans, setMyPlans] = useState<any[]>([]);
   const [activeSession, setActiveSession] = useState<any>(null);
@@ -79,17 +80,19 @@ export default function App() {
   const [frequency, setFrequency] = useState<string[]>([]);
   const [volumeHistory, setVolumeHistory] = useState<any[]>([]);
 
-  // UI
+  // UX de Treino Ativo (Nova Lógica)
+  const [cargas, setCargas] = useState<Record<number, string>>({});
+  const [repsSet, setRepsSet] = useState<Record<number, string>>({});
+  const [currentLogs, setCurrentLogs] = useState<{exerciseId: number, carga: number, reps: number}[]>([]);
+
+  // UI Modais e Login
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [libTab, setLibTab] = useState<'global' | 'custom'>('global');
   const [isLogin, setIsLogin] = useState(true);
-
+  
   // Formulários
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
-  const [carga, setCarga] = useState('');
-  const [reps, setReps] = useState('');
-  const [exSelecionado, setExSelecionado] = useState('');
   const [novoExNome, setNovoExNome] = useState('');
   const [novoExGrupo, setNovoExGrupo] = useState('Peito');
   const [novoPeso, setNovoPeso] = useState('');
@@ -101,8 +104,16 @@ export default function App() {
   useEffect(() => {
     const saved = localStorage.getItem('@GymTracker:user');
     if (saved) setUser(JSON.parse(saved));
+    
+    // Restaura a sessão caso você atualize a página no meio do treino
     const sessao = localStorage.getItem('@GymTracker:activeSession');
-    if (sessao) setActiveSession(JSON.parse(sessao));
+    if (sessao) {
+      const parsedSession = JSON.parse(sessao);
+      setActiveSession(parsedSession);
+      if (parsedSession.logs) {
+        setCurrentLogs(parsedSession.logs.map((l:any) => ({ exerciseId: l.exerciseId, carga: l.carga, reps: l.repsFeitas || l.reps })));
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -142,7 +153,7 @@ export default function App() {
         fetch(`${API_URL}/plans/${user.id}`),
         fetch(`${API_URL}/weight/${user.id}`),
         fetch(`${API_URL}/logs/frequency/${user.id}`),
-        fetch(`${API_URL}/volume/${user.id}`) // Nova rota
+        fetch(`${API_URL}/volume/${user.id}`)
       ]);
       if (libRes.ok) setLibrary(await libRes.json());
       if (planRes.ok) setMyPlans(await planRes.json());
@@ -167,6 +178,7 @@ export default function App() {
     } else alert(data.error);
   };
 
+  // --- NOVA LÓGICA DE TREINO ---
   const handleStartWorkout = async () => {
     const res = await fetch(`${API_URL}/sessions/start`, {
       method: 'POST',
@@ -175,47 +187,70 @@ export default function App() {
     });
     if (res.ok) {
       const data = await res.json();
+      data.logs = []; // Garante que a sessão nova comece vazia
       setActiveSession(data);
+      setCurrentLogs([]);
       localStorage.setItem('@GymTracker:activeSession', JSON.stringify(data));
     }
   };
 
+  const handleAddSerie = async (exId: number) => {
+    const c = Number(cargas[exId]);
+    const r = Number(repsSet[exId]);
+    if (!c || !r || !activeSession) return;
+
+    const res = await fetch(`${API_URL}/logs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: user.id,
+        exerciseId: exId,
+        carga: c,
+        repsFeitas: r,
+        sessionId: activeSession.id
+      })
+    });
+
+    if (res.ok) {
+      // Atualiza o estado visual na hora para você ver a série feita
+      const newLogs = [...currentLogs, { exerciseId: exId, carga: c, reps: r }];
+      setCurrentLogs(newLogs);
+      
+      // Atualiza o cache local para você não perder dados se recarregar a tela
+      const updatedSession = { ...activeSession, logs: newLogs };
+      setActiveSession(updatedSession);
+      localStorage.setItem('@GymTracker:activeSession', JSON.stringify(updatedSession));
+
+      // Limpa os campos daquele exercício específico e liga o cronômetro
+      setCargas({ ...cargas, [exId]: '' });
+      setRepsSet({ ...repsSet, [exId]: '' });
+      setRestTime(60); 
+    }
+  };
+
   const handleEndWorkout = async () => {
-    if (!confirm("Encerrar treino e calcular calorias?")) return;
+    if (!confirm("Finalizar sessão e salvar progresso?")) return;
     const res = await fetch(`${API_URL}/sessions/end`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: user.id })
     });
     if (res.ok) {
+      const sessionFinalizada = await res.json();
+      // Anexar os logs locais na sessão finalizada para o relatório sair perfeito
+      sessionFinalizada.logs = currentLogs;
+      
       setActiveSession(null);
+      setCurrentLogs([]);
       setRestTime(0);
       localStorage.removeItem('@GymTracker:activeSession');
-      fetchData();
-      alert("Treino salvo com sucesso!");
+      
+      fetchData(); // Atualiza gráficos
+      setSelectedReport(sessionFinalizada); // Abre o relatório final de troféu
     }
   };
 
-  const handleAddSerie = async (e: any) => {
-    e.preventDefault();
-    if (!exSelecionado || !activeSession) return;
-    const res = await fetch(`${API_URL}/logs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: user.id,
-        exerciseId: Number(exSelecionado),
-        carga: Number(carga),
-        repsFeitas: Number(reps),
-        sessionId: activeSession.id
-      })
-    });
-    if (res.ok) {
-      setCarga(''); setReps('');
-      setRestTime(60); // Inicia o cronômetro de 60 segundos
-    }
-  };
-
+  // --- ROTINAS DE API PADRÃO ---
   const handleAddToPlan = async (exId: number, ficha: string) => {
     const res = await fetch(`${API_URL}/plans`, {
       method: 'POST',
@@ -301,7 +336,7 @@ export default function App() {
             <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
             <p className="text-gray-400 text-sm mt-2">O seu treino, no seu controle.</p>
           </div>
-
+          
           <form onSubmit={handleAuth} className="space-y-4">
             <input type="email" placeholder="E-mail" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={email} onChange={e => setEmail(e.target.value)} />
             <input type="password" placeholder="Senha" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={senha} onChange={e => setSenha(e.target.value)} />
@@ -329,57 +364,139 @@ export default function App() {
       </header>
 
       <main className="max-w-md mx-auto px-4 mt-6">
-
-        {/* ABA TREINAR */}
+        
+        {/* =========================================
+            ABA TREINAR (NOVO FLUXO PROFISSIONAL)
+        ============================================= */}
         {activeTab === 'treinar' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 text-center shadow-lg">
-              {activeSession ? (
-                <div>
-                  <div className="flex justify-center items-center gap-2 mb-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-green-400 font-bold text-sm">TREINO EM ANDAMENTO</span>
-                  </div>
-                  <div className="text-4xl font-black font-mono mb-4 text-white tracking-widest">{elapsedTime}</div>
-                  <button onClick={handleEndWorkout} className="w-full bg-red-600 py-3 rounded-xl font-bold">FINALIZAR TREINO</button>
+            
+            {!activeSession ? (
+              /* ESTADO 1: PRÉ-TREINO (Escolha da Ficha) */
+              <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
+                <h2 className="text-xl font-black mb-4 text-center">Qual o alvo de hoje?</h2>
+                
+                <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
+                  {['A', 'B', 'C'].map(f => (
+                    <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Ficha {f}</button>
+                  ))}
                 </div>
-              ) : (
-                <button onClick={handleStartWorkout} className="w-full bg-blue-600 hover:bg-blue-700 transition-colors py-4 rounded-xl font-bold uppercase tracking-widest">Iniciar Treino</button>
-              )}
-            </div>
 
-            {/* CRONÔMETRO DE DESCANSO VISUAL */}
-            {restTime > 0 && (
-              <div className="bg-blue-900/30 border border-blue-500/50 p-4 rounded-2xl text-center animate-pulse">
-                <p className="text-blue-400 text-[10px] font-bold uppercase mb-1 tracking-widest">Tempo de Descanso</p>
-                <p className="text-3xl font-black font-mono text-white">
-                  00:{restTime.toString().padStart(2, '0')}
-                </p>
-                <button onClick={() => setRestTime(0)} className="text-[10px] text-gray-400 mt-2 uppercase underline hover:text-white">Pular Descanso</button>
+                <div className="space-y-2 mb-6 max-h-60 overflow-y-auto pr-2 scrollbar-hide">
+                  {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
+                    <div key={p.id} className="bg-gray-900 p-3 rounded-xl border border-gray-800 flex justify-between items-center">
+                      <span className="font-bold text-sm">{p.exercise.nome}</span>
+                      <span className="text-[10px] text-blue-500 font-bold uppercase">{p.exercise.grupoMuscular}</span>
+                    </div>
+                  )) : (
+                    <div className="text-center py-6 border border-dashed border-gray-700 rounded-xl">
+                      <p className="text-gray-500 text-sm">Ficha {fichaAtiva} vazia.</p>
+                      <button onClick={() => setActiveTab('fichas')} className="text-blue-500 text-xs font-bold mt-2 uppercase">Ir para Fichas</button>
+                    </div>
+                  )}
+                </div>
+
+                <button 
+                  onClick={handleStartWorkout}
+                  disabled={exerciciosAtuais.length === 0}
+                  className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-xl font-black uppercase tracking-widest disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-lg shadow-blue-500/30"
+                >
+                  INICIAR TREINO
+                </button>
+              </div>
+
+            ) : (
+
+              /* ESTADO 2: TREINO ATIVO (Lista de Cartões e Cronômetros) */
+              <div className="space-y-6">
+                
+                {/* Cabeçalho do Treino Flutuante */}
+                <div className="bg-gray-800 p-4 rounded-3xl border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.1)] text-center sticky top-4 z-30">
+                  <div className="flex justify-between items-center px-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                      <span className="text-red-400 font-bold text-[10px] tracking-widest uppercase">Gravando</span>
+                    </div>
+                    <div className="text-2xl font-black font-mono text-white tracking-widest">{elapsedTime}</div>
+                  </div>
+                  
+                  {restTime > 0 && (
+                    <div className="mt-3 bg-blue-900/40 p-2 rounded-xl border border-blue-500/30 flex justify-between items-center animate-pulse">
+                      <span className="text-blue-400 text-[10px] font-bold uppercase tracking-widest pl-2">Descanso</span>
+                      <span className="text-xl font-black font-mono text-white">00:{restTime.toString().padStart(2, '0')}</span>
+                      <button onClick={() => setRestTime(0)} className="bg-gray-900 px-3 py-1 rounded-lg text-[10px] text-gray-400 font-bold hover:text-white">PULAR</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Lista Ativa de Exercícios da Ficha */}
+                <div className="space-y-4">
+                  {exerciciosAtuais.map(p => {
+                    const exLogs = currentLogs.filter(l => l.exerciseId === p.exercise.id);
+                    
+                    return (
+                      <div key={p.id} className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-lg relative overflow-hidden">
+                        
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="font-black text-lg text-white leading-tight">{p.exercise.nome}</h3>
+                            <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">{p.exercise.grupoMuscular}</p>
+                          </div>
+                        </div>
+
+                        {/* Visor de Séries Feitas Neste Treino */}
+                        {exLogs.length > 0 && (
+                          <div className="mb-4 space-y-2">
+                            {exLogs.map((log, idx) => (
+                              <div key={idx} className="flex justify-between items-center bg-gray-900/80 p-2 px-4 rounded-lg border border-gray-700/50">
+                                <span className="text-[10px] text-gray-500 font-bold uppercase">Série {idx + 1}</span>
+                                <span className="text-sm font-black text-white">{log.carga} <span className="text-gray-500 font-normal text-xs">kg ×</span> {log.reps} <span className="text-gray-500 font-normal text-xs">reps</span></span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Formulário Embutido da Série */}
+                        <div className="flex gap-2 bg-gray-900 p-2 rounded-2xl border border-gray-700">
+                          <input 
+                            type="number" 
+                            placeholder="kg" 
+                            value={cargas[p.exercise.id] || ''} 
+                            onChange={e => setCargas({...cargas, [p.exercise.id]: e.target.value})} 
+                            className="w-16 bg-gray-800 p-3 rounded-xl border border-gray-700 outline-none text-center font-bold text-sm" 
+                          />
+                          <input 
+                            type="number" 
+                            placeholder="reps" 
+                            value={repsSet[p.exercise.id] || ''} 
+                            onChange={e => setRepsSet({...repsSet, [p.exercise.id]: e.target.value})} 
+                            className="w-16 bg-gray-800 p-3 rounded-xl border border-gray-700 outline-none text-center font-bold text-sm" 
+                          />
+                          <button 
+                            onClick={() => handleAddSerie(p.exercise.id)} 
+                            disabled={!cargas[p.exercise.id] || !repsSet[p.exercise.id]} 
+                            className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl font-black text-[11px] uppercase tracking-wider disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            + SÉRIE
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button onClick={handleEndWorkout} className="w-full bg-red-600 hover:bg-red-700 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-red-500/20 transition-all mt-8">
+                  FINALIZAR TREINO
+                </button>
               </div>
             )}
-
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
-              <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
-                {['A', 'B', 'C'].map(f => (
-                  <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-lg font-bold transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-white'}`}>Ficha {f}</button>
-                ))}
-              </div>
-              <form onSubmit={handleAddSerie} className="space-y-4">
-                <select className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={exSelecionado} onChange={e => setExSelecionado(e.target.value)}>
-                  <option value="">Selecione o exercício...</option>
-                  {exerciciosAtuais.map(p => <option key={p.id} value={p.exercise.id}>{p.exercise.nome}</option>)}
-                </select>
-                <div className="grid grid-cols-2 gap-4">
-                  <input type="number" placeholder="Carga (kg)" className="bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={carga} onChange={e => setCarga(e.target.value)} />
-                  <input type="number" placeholder="Reps" className="bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={reps} onChange={e => setReps(e.target.value)} />
-                </div>
-                <button disabled={!activeSession} className="w-full bg-blue-600 py-4 rounded-xl font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-all">REGISTRAR SÉRIE</button>
-              </form>
-            </div>
           </div>
         )}
 
+        {/* =========================================
+            RESTANTE DAS ABAS (Mantidas Intactas)
+        ============================================= */}
+        
         {/* ABA FICHAS */}
         {activeTab === 'fichas' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
@@ -387,7 +504,7 @@ export default function App() {
               <h2 className="text-xl font-bold">Configurar Fichas</h2>
               <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-blue-500/30">+ EXERCÍCIO</button>
             </div>
-
+            
             <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
               {['A', 'B', 'C'].map(f => (
                 <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Ficha {f}</button>
@@ -415,15 +532,13 @@ export default function App() {
         {/* ABA EVOLUÇÃO */}
         {activeTab === 'evolucao' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
-
-            {/* NOVO: Gráfico de Volume Total de Carga */}
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-64 flex flex-col">
               <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Total de Carga (kg)</h3>
               <div className="flex-1 min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={volumeHistory.map((v: any) => ({ ...v, d: new Date(v.data).getDate() }))}>
+                  <BarChart data={volumeHistory.map((v:any) => ({ ...v, d: new Date(v.data).getDate() }))}>
                     <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
                     <Bar dataKey="volume" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -431,22 +546,22 @@ export default function App() {
             </div>
 
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-80 flex flex-col">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
-                <form onSubmit={handleRegistrarPeso} className="flex gap-2">
-                  <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
-                  <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
-                </form>
-              </div>
-              <div className="flex-1 min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }))}>
-                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
-                    <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+               <div className="flex justify-between items-center mb-6">
+                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
+                 <form onSubmit={handleRegistrarPeso} className="flex gap-2">
+                   <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
+                   <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
+                 </form>
+               </div>
+               <div className="flex-1 min-h-0">
+                 <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={weightHistory.map((w:any) => ({ ...w, d: new Date(w.data).getDate() }))}>
+                      <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                      <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                 </ResponsiveContainer>
+               </div>
             </div>
 
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg mb-8">
@@ -457,7 +572,7 @@ export default function App() {
                   const iso = d.toISOString().split('T')[0];
                   const treinou = frequency.includes(iso);
                   return (
-                    <button
+                    <button 
                       key={iso}
                       onClick={() => treinou && handleOpenReport(iso)}
                       className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
@@ -474,23 +589,20 @@ export default function App() {
         {/* ABA PERFIL */}
         {activeTab === 'perfil' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
-              <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4">
-                <span className="text-2xl font-black text-gray-500">{user.email.substring(0, 2).toUpperCase()}</span>
-              </div>
-              <h2 className="text-xl font-bold mb-1">{user.email}</h2>
-              <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
+             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
+                <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4">
+                  <span className="text-2xl font-black text-gray-500">{user.email.substring(0,2).toUpperCase()}</span>
+                </div>
+                <h2 className="text-xl font-bold mb-1">{user.email}</h2>
+                <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
 
-              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
-                Sair da Conta
-              </button>
-            </div>
+                <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
+                  Sair da Conta
+                </button>
+             </div>
           </div>
         )}
       </main>
-
-      {/* MODAIS AQUI (Biblioteca e Relatório) ... Omitido para economizar espaço, o código continua o mesmo que você já tem no final */}
-      {/* ... Certifique-se de copiar o bloco {isLibraryOpen && ...} e {selectedReport && ...} que já estavam no arquivo anterior! */}
 
       {/* MODAL BIBLIOTECA & CRIAÇÃO */}
       {isLibraryOpen && (
@@ -567,16 +679,16 @@ export default function App() {
 
       {/* MODAL RELATÓRIO */}
       {selectedReport && (
-        <ReportModal
-          sessionData={selectedReport}
-          allExercises={library}
-          onClose={() => setSelectedReport(null)}
+        <ReportModal 
+          sessionData={selectedReport} 
+          allExercises={library} 
+          onClose={() => setSelectedReport(null)} 
           onShare={shareReport}
           onDelete={async () => {
-            if (confirm("Excluir treino?")) {
-              await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
-              setSelectedReport(null); fetchData();
-            }
+             if(confirm("Excluir treino?")) {
+               await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
+               setSelectedReport(null); fetchData();
+             }
           }}
         />
       )}
