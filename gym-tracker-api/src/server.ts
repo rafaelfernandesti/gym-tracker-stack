@@ -486,6 +486,24 @@ app.get('/volume/:userId', async (req, res) => {
         res.status(500).json({ error: 'Erro ao buscar volume.' });
     }
 });
+
+// 6. Buscar Último Treino por Exercício (O "Fantasma")
+app.get('/logs/last/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const lastLogs = await prisma.workoutLog.findMany({
+            where: { userId },
+            orderBy: { id: 'desc' }, // Pega do mais recente para o mais antigo
+            distinct: ['exerciseId'], // Pega apenas a última aparição de cada exercício
+        });
+        res.json(lastLogs);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao buscar histórico fantasma.' });
+    }
+});
+
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
