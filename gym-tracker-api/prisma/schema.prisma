@@ -8,62 +8,50 @@ datasource db {
 }
 
 model User {
-  id    String  @id @default(uuid())
-  email String  @unique
-  senha String  @default("123456")
-  nome  String?
-
-  // Mantendo os seus campos originais intactos:
+  id        String   @id @default(uuid())
+  email     String   @unique
+  senha     String   @default("123456")
+  nome      String?
   altura    Float?
   pesoAtual Float?
   createdAt DateTime @default(now())
 
-  // Relacionamentos:
-  WorkoutLog  WorkoutLog[]
-  WorkoutPlan WorkoutPlan[]
-  WeightLog   WeightLog[]
-  WorkoutSession WorkoutSession[]
+  WorkoutLog      WorkoutLog[]
+  WorkoutSession  WorkoutSession[]
+  customExercises Exercise[]
+  workoutPlans    WorkoutPlan[]
+  weightLogs      WeightLog[]
 }
 
 model WeightLog {
-  id        Int      @id @default(autoincrement())
-  peso      Float
-  data      DateTime @default(now())
-  
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  id   Int      @id @default(autoincrement())
+  peso Float
+  data DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 }
 
 model Exercise {
-  id            Int           @id @default(autoincrement())
+  id            Int     @id @default(autoincrement()) // ID é INT
   nome          String
-  grupoMuscular String
-  equipamento   String?
-  ficha         String        @default("A")
-  workoutItems  WorkoutItem[]
-  logs          WorkoutLog[]
+  grupoMuscular String?
+  userId        String?
+  user          User?   @relation(fields: [userId], references: [id])
+
+  WorkoutLog  WorkoutLog[]
+  WorkoutPlan WorkoutPlan[]
 }
 
+// ESTA É A NOVA TABELA DE FICHAS
 model WorkoutPlan {
-  id     String  @id @default(uuid())
-  userId String
-  nome   String
-  ativa  Boolean @default(true)
+  id         Int    @id @default(autoincrement()) // ID é INT
+  userId     String
+  exerciseId Int // Precisa ser INT para bater com Exercise.id
+  ficha      String // "A", "B", "C"
 
-  user  User          @relation(fields: [userId], references: [id])
-  items WorkoutItem[]
-}
-
-model WorkoutItem {
-  id               String @id @default(uuid())
-  planId           String
-  exerciseId       Int
-  series           Int
-  repeticoes       String
-  descansoSegundos Int
-
-  plan     WorkoutPlan @relation(fields: [planId], references: [id])
-  exercise Exercise    @relation(fields: [exerciseId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+  exercise Exercise @relation(fields: [exerciseId], references: [id])
 }
 
 model WorkoutLog {
@@ -77,18 +65,18 @@ model WorkoutLog {
   user     User     @relation(fields: [userId], references: [id])
   exercise Exercise @relation(fields: [exerciseId], references: [id])
 
-  sessionId       String?         // <-- ADICIONE ESTA LINHA
-  session         WorkoutSession? @relation(fields: [sessionId], references: [id]) // <-- ADICIONE ESTA LINHA
+  sessionId String? // <-- ADICIONE ESTA LINHA
+  session   WorkoutSession? @relation(fields: [sessionId], references: [id]) // <-- ADICIONE ESTA LINHA
 }
 
 // Nova tabela para agrupar o treino do dia
 model WorkoutSession {
-  id        String       @id @default(uuid())
-  startTime DateTime     @default(now())
-  endTime   DateTime?    // Nulo enquanto o treino está rolando
-  calories  Float?       // Calculado no fim
+  id        String    @id @default(uuid())
+  startTime DateTime  @default(now())
+  endTime   DateTime? // Nulo enquanto o treino está rolando
+  calories  Float? // Calculado no fim
 
-  userId    String
-  user      User         @relation(fields: [userId], references: [id])
-  logs      WorkoutLog[] // Séries realizadas nesta sessão
+  userId String
+  user   User         @relation(fields: [userId], references: [id])
+  logs   WorkoutLog[] // Séries realizadas nesta sessão
 }

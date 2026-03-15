@@ -74,23 +74,59 @@ app.get('/exercises', async (req, res) => {
     }
 });
 
-// Nova rota de criação de exercício
-app.post('/exercises', async (req, res) => {
-    const { nome, grupoMuscular, equipamento, ficha } = req.body;
+// BUSCAR EXERCÍCIOS: Globais (userId null) + Customizados do Usuário
+app.get('/exercises/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const exercises = await prisma.exercise.findMany({
+            where: {
+                OR: [
+                    { userId: null },   // Exercícios padrão
+                    { userId: userId }  // Exercícios criados por este usuário
+                ]
+            },
+            orderBy: [
+                { grupoMuscular: 'asc' },
+                { nome: 'asc' }
+            ]
+        });
+        res.json(exercises);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar exercícios.' });
+    }
+});
 
+// CRIAR EXERCÍCIO CUSTOMIZADO
+app.post('/exercises', async (req, res) => {
+    const { nome, grupoMuscular, userId } = req.body;
     try {
         const exercise = await prisma.exercise.create({
             data: {
                 nome,
-                grupoMuscular: grupoMuscular || 'Geral',
-                equipamento: equipamento || 'Livre',
-                ficha: ficha || 'A' // <-- Salva a ficha recebida
+                grupoMuscular,
+                userId // Agora vinculado ao dono
             }
         });
         res.status(201).json(exercise);
     } catch (error) {
-        console.error("ERRO NO PRISMA:", error);
-        res.status(500).json({ error: 'Erro ao criar exercício.', detalhes: String(error) });
+        res.status(500).json({ error: 'Erro ao criar exercício customizado.' });
+    }
+});
+
+// EXCLUIR EXERCÍCIO (Apenas se for customizado do usuário)
+app.delete('/exercises/:id/:userId', async (req, res) => {
+    const { id, userId } = req.params;
+    try {
+        const ex = await prisma.exercise.findFirst({
+            where: { id: Number(id), userId: userId }
+        });
+
+        if (!ex) return res.status(403).json({ error: 'Você não pode excluir um exercício padrão.' });
+
+        await prisma.exercise.delete({ where: { id: Number(id) } });
+        res.json({ message: 'Excluído com sucesso.' });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao excluir.' });
     }
 });
 
@@ -183,7 +219,6 @@ app.post('/exercises', async (req, res) => {
             data: {
                 nome,
                 grupoMuscular: grupoMuscular || 'Geral',
-                equipamento: equipamento || 'Livre'
             }
         });
         res.status(201).json(exercise);
@@ -218,8 +253,7 @@ app.put('/exercises/:id', async (req, res) => {
             where: { id: Number(id) },
             data: {
                 nome,
-                grupoMuscular,
-                ficha
+                grupoMuscular
             }
         });
         res.json(exercise);
