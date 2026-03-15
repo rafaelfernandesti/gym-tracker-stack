@@ -145,38 +145,38 @@ app.post('/users', async (req, res) => {
 
 // 1. Buscar a Ficha do Usuário (Corrigido: removido 'items' ou 'nome')
 app.get('/plans/:userId', async (req, res) => {
-  const { userId } = req.params;
-  try {
-    const plans = await prisma.workoutPlan.findMany({
-      where: { userId },
-      include: { 
-        exercise: true // Isso traz os dados do exercício (nome, grupoMuscular)
-      },
-      orderBy: { ficha: 'asc' }
-    });
-    res.json(plans);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao buscar sua ficha.' });
-  }
+    const { userId } = req.params;
+    try {
+        const plans = await prisma.workoutPlan.findMany({
+            where: { userId },
+            include: {
+                exercise: true // Isso traz os dados do exercício (nome, grupoMuscular)
+            },
+            orderBy: { ficha: 'asc' }
+        });
+        res.json(plans);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao buscar sua ficha.' });
+    }
 });
 
 // 2. Adicionar Exercício à Ficha (Corrigido: removido campos inexistentes)
 app.post('/plans', async (req, res) => {
-  const { userId, exerciseId, ficha } = req.body;
-  try {
-    const plan = await prisma.workoutPlan.create({
-      data: {
-        userId,
-        exerciseId: Number(exerciseId),
-        ficha: ficha.toUpperCase()
-      }
-    });
-    res.status(201).json(plan);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erro ao adicionar exercício à ficha.' });
-  }
+    const { userId, exerciseId, ficha } = req.body;
+    try {
+        const plan = await prisma.workoutPlan.create({
+            data: {
+                userId,
+                exerciseId: Number(exerciseId),
+                ficha: ficha.toUpperCase()
+            }
+        });
+        res.status(201).json(plan);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao adicionar exercício à ficha.' });
+    }
 });
 // NOVA ROTA: Registrar Execução Diária (Log)
 app.post('/logs', async (req, res) => {
@@ -460,7 +460,32 @@ app.get('/reports/:userId/:date', async (req, res) => {
     }
 });
 
+// 5. Buscar Volume Total de Carga (Últimos 7 Treinos)
+app.get('/volume/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const sessions = await prisma.workoutSession.findMany({
+            where: { userId, endTime: { not: null } },
+            include: { logs: true },
+            orderBy: { startTime: 'asc' },
+            take: 7 // Pega apenas os últimos 7 treinos finalizados
+        });
 
+        const volumeData = sessions.map(session => {
+            // Faz a conta: Carga * Repetições para cada série e soma tudo
+            const totalVolume = session.logs.reduce((acc, log) => acc + (log.carga * log.repsFeitas), 0);
+            return {
+                data: session.startTime.toISOString(),
+                volume: totalVolume
+            };
+        });
+
+        res.json(volumeData);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao buscar volume.' });
+    }
+});
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
