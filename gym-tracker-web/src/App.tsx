@@ -59,7 +59,7 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
         <button onClick={onClose} className="flex-1 bg-gray-700 py-3 rounded-xl font-bold">FECHAR</button>
         <button onClick={onShare} className="flex-1 bg-green-600 py-3 rounded-xl font-bold">COMPARTILHAR</button>
       </div>
-      <button onClick={onDelete} className="mt-4 text-red-500 text-xs font-bold uppercase">Excluir Registro</button>
+      <button onClick={onDelete} className="mt-4 text-red-500 text-xs font-bold uppercase hover:text-red-400 transition-colors">Excluir Registro</button>
     </div>
   );
 }
@@ -91,6 +91,7 @@ export default function App() {
   const [exSelecionado, setExSelecionado] = useState('');
   const [novoExNome, setNovoExNome] = useState('');
   const [novoExGrupo, setNovoExGrupo] = useState('Peito');
+  const [novoPeso, setNovoPeso] = useState('');
 
   // Cronômetro
   const [elapsedTime, setElapsedTime] = useState('00:00');
@@ -106,7 +107,7 @@ export default function App() {
     if (user) fetchData();
   }, [user]);
 
-  // Lógica do Cronômetro
+  // Cronômetro
   useEffect(() => {
     let interval: any;
     if (activeSession) {
@@ -198,7 +199,6 @@ export default function App() {
     });
     if (res.ok) {
       setCarga(''); setReps('');
-      // alert("Série registrada!"); (Removido para fluxo mais rápido)
     }
   };
 
@@ -231,7 +231,28 @@ export default function App() {
     if (res.ok) {
       fetchData();
       setNovoExNome('');
-      alert("Exercício criado com sucesso!");
+      alert("Exercício criado!");
+    }
+  };
+
+  const handleDeleteCustomExercise = async (id: number) => {
+    if (!confirm("Excluir este exercício permanentemente?")) return;
+    const res = await fetch(`${API_URL}/exercises/${id}/${user.id}`, { method: 'DELETE' });
+    if (res.ok) fetchData();
+    else alert("Você só pode excluir exercícios que você mesmo criou.");
+  };
+
+  const handleRegistrarPeso = async (e: any) => {
+    e.preventDefault();
+    if (!novoPeso) return;
+    const res = await fetch(`${API_URL}/weight`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, peso: Number(novoPeso) })
+    });
+    if (res.ok) {
+      fetchData();
+      setNovoPeso('');
     }
   };
 
@@ -256,13 +277,13 @@ export default function App() {
     }
   };
 
-  // --- TELA DE LOGIN RESTAURADA ---
+  // --- TELA DE LOGIN ---
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col justify-center p-4 text-white">
-        <div className="max-w-md mx-auto w-full bg-gray-800 p-8 rounded-2xl border border-gray-700 shadow-2xl">
+        <div className="max-w-md mx-auto w-full bg-gray-800 p-8 rounded-3xl border border-gray-700 shadow-2xl">
           <div className="flex flex-col items-center justify-center mb-8">
-            <img src="/logo.png" alt="GymTracker Logo" className="w-20 h-20 mb-4 rounded-xl shadow-lg" onError={(e) => e.currentTarget.style.display = 'none'} />
+            <img src="/logo.png" alt="GymTracker Logo" className="w-20 h-20 mb-4 rounded-2xl shadow-lg" onError={(e) => e.currentTarget.style.display = 'none'} />
             <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
             <p className="text-gray-400 text-sm mt-2">O seu treino, no seu controle.</p>
           </div>
@@ -279,20 +300,23 @@ export default function App() {
   }
 
   const exerciciosAtuais = myPlans.filter(p => p.ficha === fichaAtiva);
+  const customExercises = library.filter(ex => ex.userId === user.id);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white pb-28 font-sans">
-      {/* HEADER RESTAURADO */}
       <header className="p-6 flex justify-between items-center max-w-md mx-auto border-b border-gray-900">
         <div className="flex items-center gap-3">
           <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-md" onError={(e) => e.currentTarget.style.display = 'none'} />
           <h1 className="text-xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
         </div>
-        <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-xs font-bold text-red-500 uppercase">Sair</button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-400">Olá, {user.email.split('@')[0]}</span>
+        </div>
       </header>
 
       <main className="max-w-md mx-auto px-4 mt-6">
-        {/* TREINAR */}
+        
+        {/* ABA TREINAR */}
         {activeTab === 'treinar' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 text-center shadow-lg">
@@ -331,7 +355,7 @@ export default function App() {
           </div>
         )}
 
-        {/* MINHAS FICHAS */}
+        {/* ABA FICHAS */}
         {activeTab === 'fichas' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
             <div className="flex justify-between items-center mb-2">
@@ -363,8 +387,8 @@ export default function App() {
           </div>
         )}
 
-        {/* PERFIL & FREQUÊNCIA */}
-        {activeTab === 'perfil' && (
+        {/* ABA EVOLUÇÃO (Restaurada e Isolada) */}
+        {activeTab === 'evolucao' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
               <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Frequência Mensal</h3>
@@ -386,16 +410,41 @@ export default function App() {
               </div>
             </div>
             
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-64">
-               <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Evolução de Peso</h3>
-               <ResponsiveContainer width="100%" height="80%">
-                  <LineChart data={weightHistory.map((w:any) => ({ ...w, d: new Date(w.data).getDate() }))}>
-                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
-                    <Line type="monotone" dataKey="peso" stroke="#3B82F6" strokeWidth={4} dot={{ r: 4, fill: '#3B82F6', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
-                  </LineChart>
-               </ResponsiveContainer>
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-80 flex flex-col">
+               <div className="flex justify-between items-center mb-6">
+                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
+                 <form onSubmit={handleRegistrarPeso} className="flex gap-2">
+                   <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
+                   <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
+                 </form>
+               </div>
+               <div className="flex-1 min-h-0">
+                 <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={weightHistory.map((w:any) => ({ ...w, d: new Date(w.data).getDate() }))}>
+                      <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                      <Line type="monotone" dataKey="peso" stroke="#3B82F6" strokeWidth={4} dot={{ r: 4, fill: '#3B82F6', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                 </ResponsiveContainer>
+               </div>
             </div>
+          </div>
+        )}
+
+        {/* ABA PERFIL (Minimalista) */}
+        {activeTab === 'perfil' && (
+          <div className="space-y-6 animate-in slide-in-from-bottom">
+             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
+                <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4">
+                  <span className="text-2xl font-black text-gray-500">{user.email.substring(0,2).toUpperCase()}</span>
+                </div>
+                <h2 className="text-xl font-bold mb-1">{user.email}</h2>
+                <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
+
+                <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
+                  Sair da Conta
+                </button>
+             </div>
           </div>
         )}
       </main>
@@ -409,7 +458,7 @@ export default function App() {
           </header>
 
           <div className="flex bg-gray-900 border-b border-gray-800 p-2">
-            <button onClick={() => setLibTab('global')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors ${libTab === 'global' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Biblioteca</button>
+            <button onClick={() => setLibTab('global')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors ${libTab === 'global' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Biblioteca Global</button>
             <button onClick={() => setLibTab('custom')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors ${libTab === 'custom' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Meus Exercícios</button>
           </div>
 
@@ -419,7 +468,7 @@ export default function App() {
                 <div key={grupo}>
                   <h3 className="text-blue-500 text-[11px] font-black uppercase mb-3 tracking-widest">{grupo}</h3>
                   <div className="space-y-2">
-                    {library.filter(ex => ex.grupoMuscular === grupo).map(ex => (
+                    {library.filter(ex => ex.grupoMuscular === grupo && !ex.userId).map(ex => (
                       <div key={ex.id} className="bg-gray-800 p-4 rounded-2xl flex justify-between items-center border border-gray-700">
                         <span className="font-bold text-sm text-white">{ex.nome}</span>
                         <div className="flex gap-1">
@@ -433,42 +482,52 @@ export default function App() {
                 </div>
               ))
             ) : (
-              <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700">
-                <h3 className="text-lg font-bold mb-4">Criar Novo Exercício</h3>
-                <form onSubmit={handleCreateCustomExercise} className="space-y-4">
-                  <input type="text" placeholder="Nome do exercício" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExNome} onChange={e => setNovoExNome(e.target.value)} required />
-                  <select className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExGrupo} onChange={e => setNovoExGrupo(e.target.value)}>
-                    {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                  <button className="w-full bg-green-600 py-4 rounded-xl font-bold">SALVAR EXERCÍCIO</button>
-                </form>
+              <div className="space-y-6">
+                <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700">
+                  <h3 className="text-lg font-bold mb-4">Novo Exercício</h3>
+                  <form onSubmit={handleCreateCustomExercise} className="space-y-4">
+                    <input type="text" placeholder="Nome (Ex: Supino Declinado)" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExNome} onChange={e => setNovoExNome(e.target.value)} required />
+                    <select className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExGrupo} onChange={e => setNovoExGrupo(e.target.value)}>
+                      {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                    <button className="w-full bg-green-600 py-4 rounded-xl font-bold">SALVAR</button>
+                  </form>
+                </div>
+
+                {customExercises.length > 0 && (
+                  <div>
+                    <h3 className="text-gray-400 text-[11px] font-black uppercase mb-3 tracking-widest">Criados por você</h3>
+                    <div className="space-y-2">
+                      {customExercises.map(ex => (
+                        <div key={ex.id} className="bg-gray-800 p-4 rounded-2xl flex justify-between items-center border border-gray-700">
+                          <div>
+                            <span className="font-bold text-sm text-white block">{ex.nome}</span>
+                            <span className="text-[10px] text-gray-500 uppercase">{ex.grupoMuscular}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {['A', 'B', 'C'].map(f => (
+                              <button key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-2 py-1 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors">+{f}</button>
+                            ))}
+                            <div className="w-px h-6 bg-gray-700 mx-1"></div>
+                            <button onClick={() => handleDeleteCustomExercise(ex.id)} className="text-red-500 hover:text-red-400 p-1">✕</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* MODAL RELATÓRIO */}
-      {selectedReport && (
-        <ReportModal 
-          sessionData={selectedReport} 
-          allExercises={library} 
-          onClose={() => setSelectedReport(null)} 
-          onShare={shareReport}
-          onDelete={async () => {
-             if(confirm("Excluir treino?")) {
-               await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
-               setSelectedReport(null); fetchData();
-             }
-          }}
-        />
-      )}
-
-      {/* NAVEGAÇÃO BOTTOM RESTAURADA (Estilo App Nativo) */}
+      {/* NAVEGAÇÃO BOTTOM (4 Abas) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 p-3 flex justify-around z-40 max-w-md mx-auto rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-        <button onClick={() => setActiveTab('treinar')} className={`p-3 px-6 rounded-2xl font-bold text-sm transition-colors ${activeTab === 'treinar' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Treinar</button>
-        <button onClick={() => setActiveTab('fichas')} className={`p-3 px-6 rounded-2xl font-bold text-sm transition-colors ${activeTab === 'fichas' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Fichas</button>
-        <button onClick={() => setActiveTab('perfil')} className={`p-3 px-6 rounded-2xl font-bold text-sm transition-colors ${activeTab === 'perfil' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Perfil</button>
+        <button onClick={() => setActiveTab('treinar')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'treinar' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Treinar</button>
+        <button onClick={() => setActiveTab('fichas')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'fichas' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Fichas</button>
+        <button onClick={() => setActiveTab('evolucao')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'evolucao' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Evolução</button>
+        <button onClick={() => setActiveTab('perfil')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'perfil' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Perfil</button>
       </nav>
     </div>
   );
