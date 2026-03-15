@@ -4,6 +4,37 @@ import { toBlob } from 'html-to-image';
 
 const API_URL = "https://gym-tracker-api-yomc.onrender.com"; 
 
+// --- FUNÇÃO DE ALARME DO DESCANSO (NATIVA) ---
+const dispararAlarmeDescanso = () => {
+  // 1. Vibração (3 pulsos rápidos - Funciona na maioria dos Androids)
+  if ('vibrate' in navigator) {
+    navigator.vibrate([300, 150, 300, 150, 500]);
+  }
+
+  // 2. Beep Sonoro (Sintetizador nativo do navegador, não precisa de mp3)
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioContext) {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'triangle'; // Timbre suave e focado
+      osc.frequency.setValueAtTime(800, ctx.currentTime); // Frequência do Beep
+      
+      gain.gain.setValueAtTime(0.5, ctx.currentTime); // Volume inicial
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5); // Fade out suave
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 1.5);
+    }
+  } catch (e) {
+    console.log("Áudio não suportado ou bloqueado no navegador atual.");
+  }
+};
+
 // --- COMPONENTE DO RELATÓRIO PRINTÁVEL ---
 function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: any) {
   const reportRef = useRef<HTMLDivElement>(null);
@@ -79,7 +110,7 @@ export default function App() {
   const [weightHistory, setWeightHistory] = useState<any[]>([]);
   const [frequency, setFrequency] = useState<string[]>([]);
   const [volumeHistory, setVolumeHistory] = useState<any[]>([]);
-  const [lastLogs, setLastLogs] = useState<any[]>([]); // <-- ESTADO DO FANTASMA
+  const [lastLogs, setLastLogs] = useState<any[]>([]); 
 
   // UX de Treino Ativo 
   const [cargas, setCargas] = useState<Record<number, string>>({});
@@ -138,10 +169,16 @@ export default function App() {
     return () => clearInterval(interval);
   }, [activeSession]);
 
-  // Cronômetro Regressivo de Descanso
+  // Cronômetro Regressivo de Descanso COM ALARME
   useEffect(() => {
     if (restTime > 0) {
-      const timerId = setTimeout(() => setRestTime(restTime - 1), 1000);
+      const timerId = setTimeout(() => {
+        // Se vai zerar neste segundo, dispara o alarme!
+        if (restTime === 1) {
+          dispararAlarmeDescanso();
+        }
+        setRestTime(restTime - 1);
+      }, 1000);
       return () => clearTimeout(timerId);
     }
   }, [restTime]);
@@ -154,7 +191,7 @@ export default function App() {
         fetch(`${API_URL}/weight/${user.id}`),
         fetch(`${API_URL}/logs/frequency/${user.id}`),
         fetch(`${API_URL}/volume/${user.id}`),
-        fetch(`${API_URL}/logs/last/${user.id}`) // Busca o Fantasma
+        fetch(`${API_URL}/logs/last/${user.id}`) 
       ]);
       if (libRes.ok) setLibrary(await libRes.json());
       if (planRes.ok) setMyPlans(await planRes.json());
@@ -180,7 +217,6 @@ export default function App() {
     } else alert(data.error);
   };
 
-  // --- LÓGICA DE TREINO ---
   const handleStartWorkout = async () => {
     const res = await fetch(`${API_URL}/sessions/start`, {
       method: 'POST',
@@ -193,6 +229,10 @@ export default function App() {
       setActiveSession(data);
       setCurrentLogs([]);
       localStorage.setItem('@GymTracker:activeSession', JSON.stringify(data));
+      
+      // Um pequeno truque: Despertamos o Áudio do navegador no clique do botão 
+      // (Navegadores bloqueiam som se não houver interação humana antes)
+      try { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); ctx.resume(); } catch(e){}
     }
   };
 
@@ -248,7 +288,6 @@ export default function App() {
     }
   };
 
-  // --- ROTINAS DE API PADRÃO ---
   const handleAddToPlan = async (exId: number, ficha: string) => {
     const res = await fetch(`${API_URL}/plans`, {
       method: 'POST',
@@ -328,7 +367,6 @@ export default function App() {
     }
   };
 
-  // --- TELA DE LOGIN ---
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col justify-center p-4 text-white">
@@ -428,7 +466,7 @@ export default function App() {
                 <div className="space-y-4">
                   {exerciciosAtuais.map(p => {
                     const exLogs = currentLogs.filter(l => l.exerciseId === p.exercise.id);
-                    const fantasma = lastLogs.find(l => l.exerciseId === p.exercise.id); // O FANTASMA AQUI!
+                    const fantasma = lastLogs.find(l => l.exerciseId === p.exercise.id); 
                     
                     return (
                       <div key={p.id} className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-lg relative overflow-hidden">
@@ -475,7 +513,6 @@ export default function App() {
                           </button>
                         </div>
                         
-                        {/* FANTASMA DO ÚLTIMO TREINO */}
                         {fantasma && (
                           <div className="mt-3 text-center">
                             <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
