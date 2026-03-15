@@ -75,10 +75,11 @@ export default function App() {
   const [myPlans, setMyPlans] = useState<any[]>([]);
   const [activeSession, setActiveSession] = useState<any>(null);
   const [selectedReport, setSelectedReport] = useState<any>(null);
-  const [daySessions, setDaySessions] = useState<any[] | null>(null); // <-- RESTAURADO AQUI
+  const [daySessions, setDaySessions] = useState<any[] | null>(null);
   const [weightHistory, setWeightHistory] = useState<any[]>([]);
   const [frequency, setFrequency] = useState<string[]>([]);
   const [volumeHistory, setVolumeHistory] = useState<any[]>([]);
+  const [lastLogs, setLastLogs] = useState<any[]>([]); // <-- ESTADO DO FANTASMA
 
   // UX de Treino Ativo 
   const [cargas, setCargas] = useState<Record<number, string>>({});
@@ -147,18 +148,20 @@ export default function App() {
 
   const fetchData = async () => {
     try {
-      const [libRes, planRes, weightRes, freqRes, volRes] = await Promise.all([
+      const [libRes, planRes, weightRes, freqRes, volRes, lastRes] = await Promise.all([
         fetch(`${API_URL}/exercises/${user.id}`),
         fetch(`${API_URL}/plans/${user.id}`),
         fetch(`${API_URL}/weight/${user.id}`),
         fetch(`${API_URL}/logs/frequency/${user.id}`),
-        fetch(`${API_URL}/volume/${user.id}`)
+        fetch(`${API_URL}/volume/${user.id}`),
+        fetch(`${API_URL}/logs/last/${user.id}`) // Busca o Fantasma
       ]);
       if (libRes.ok) setLibrary(await libRes.json());
       if (planRes.ok) setMyPlans(await planRes.json());
       if (weightRes.ok) setWeightHistory(await weightRes.json());
       if (freqRes.ok) setFrequency(await freqRes.json());
       if (volRes.ok) setVolumeHistory(await volRes.json());
+      if (lastRes.ok) setLastLogs(await lastRes.json());
     } catch (e) { console.error("Erro ao carregar dados"); }
   };
 
@@ -300,15 +303,14 @@ export default function App() {
     }
   };
 
-  // --- LÓGICA DE ABRIR RELATÓRIO ATUALIZADA ---
   const handleOpenReport = async (date: string) => {
     const res = await fetch(`${API_URL}/reports/${user.id}/${date}`);
     if (res.ok) {
       const reports = await res.json();
       if (reports.length === 1) {
-        setSelectedReport(reports[0]); // Só um treino no dia, abre direto
+        setSelectedReport(reports[0]); 
       } else if (reports.length > 1) {
-        setDaySessions(reports); // Dois ou mais treinos, abre o seletor
+        setDaySessions(reports); 
       }
     }
   };
@@ -426,6 +428,7 @@ export default function App() {
                 <div className="space-y-4">
                   {exerciciosAtuais.map(p => {
                     const exLogs = currentLogs.filter(l => l.exerciseId === p.exercise.id);
+                    const fantasma = lastLogs.find(l => l.exerciseId === p.exercise.id); // O FANTASMA AQUI!
                     
                     return (
                       <div key={p.id} className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-lg relative overflow-hidden">
@@ -471,6 +474,16 @@ export default function App() {
                             + SÉRIE
                           </button>
                         </div>
+                        
+                        {/* FANTASMA DO ÚLTIMO TREINO */}
+                        {fantasma && (
+                          <div className="mt-3 text-center">
+                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                              Último Treino: <span className="text-blue-400">{fantasma.carga}kg × {fantasma.repsFeitas} reps</span>
+                            </p>
+                          </div>
+                        )}
+
                       </div>
                     );
                   })}
@@ -591,7 +604,7 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL SELETOR DE TREINOS DO DIA (NOVO) */}
+      {/* MODAL SELETOR DE TREINOS DO DIA */}
       {daySessions && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in">
           <div className="bg-gray-900 p-6 rounded-3xl border border-gray-700 max-w-sm w-full shadow-2xl">
