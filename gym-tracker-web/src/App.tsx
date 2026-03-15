@@ -16,7 +16,6 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
   const exercisesMap: any = {};
   const musculosTrabalhados = new Set<string>();
 
-  // Corrige a leitura caso os logs venham do cache local (repsFeitas vs reps)
   sessionData.logs.forEach((log: any) => {
     const exerciseData = log.exercise || allExercises.find((ex: any) => ex.id === log.exerciseId);
     const exNome = exerciseData?.nome || 'Exercício';
@@ -76,11 +75,12 @@ export default function App() {
   const [myPlans, setMyPlans] = useState<any[]>([]);
   const [activeSession, setActiveSession] = useState<any>(null);
   const [selectedReport, setSelectedReport] = useState<any>(null);
+  const [daySessions, setDaySessions] = useState<any[] | null>(null); // <-- RESTAURADO AQUI
   const [weightHistory, setWeightHistory] = useState<any[]>([]);
   const [frequency, setFrequency] = useState<string[]>([]);
   const [volumeHistory, setVolumeHistory] = useState<any[]>([]);
 
-  // UX de Treino Ativo (Nova Lógica)
+  // UX de Treino Ativo 
   const [cargas, setCargas] = useState<Record<number, string>>({});
   const [repsSet, setRepsSet] = useState<Record<number, string>>({});
   const [currentLogs, setCurrentLogs] = useState<{exerciseId: number, carga: number, reps: number}[]>([]);
@@ -105,7 +105,6 @@ export default function App() {
     const saved = localStorage.getItem('@GymTracker:user');
     if (saved) setUser(JSON.parse(saved));
     
-    // Restaura a sessão caso você atualize a página no meio do treino
     const sessao = localStorage.getItem('@GymTracker:activeSession');
     if (sessao) {
       const parsedSession = JSON.parse(sessao);
@@ -178,7 +177,7 @@ export default function App() {
     } else alert(data.error);
   };
 
-  // --- NOVA LÓGICA DE TREINO ---
+  // --- LÓGICA DE TREINO ---
   const handleStartWorkout = async () => {
     const res = await fetch(`${API_URL}/sessions/start`, {
       method: 'POST',
@@ -187,7 +186,7 @@ export default function App() {
     });
     if (res.ok) {
       const data = await res.json();
-      data.logs = []; // Garante que a sessão nova comece vazia
+      data.logs = []; 
       setActiveSession(data);
       setCurrentLogs([]);
       localStorage.setItem('@GymTracker:activeSession', JSON.stringify(data));
@@ -212,16 +211,13 @@ export default function App() {
     });
 
     if (res.ok) {
-      // Atualiza o estado visual na hora para você ver a série feita
       const newLogs = [...currentLogs, { exerciseId: exId, carga: c, reps: r }];
       setCurrentLogs(newLogs);
       
-      // Atualiza o cache local para você não perder dados se recarregar a tela
       const updatedSession = { ...activeSession, logs: newLogs };
       setActiveSession(updatedSession);
       localStorage.setItem('@GymTracker:activeSession', JSON.stringify(updatedSession));
 
-      // Limpa os campos daquele exercício específico e liga o cronômetro
       setCargas({ ...cargas, [exId]: '' });
       setRepsSet({ ...repsSet, [exId]: '' });
       setRestTime(60); 
@@ -237,7 +233,6 @@ export default function App() {
     });
     if (res.ok) {
       const sessionFinalizada = await res.json();
-      // Anexar os logs locais na sessão finalizada para o relatório sair perfeito
       sessionFinalizada.logs = currentLogs;
       
       setActiveSession(null);
@@ -245,8 +240,8 @@ export default function App() {
       setRestTime(0);
       localStorage.removeItem('@GymTracker:activeSession');
       
-      fetchData(); // Atualiza gráficos
-      setSelectedReport(sessionFinalizada); // Abre o relatório final de troféu
+      fetchData(); 
+      setSelectedReport(sessionFinalizada); 
     }
   };
 
@@ -305,11 +300,16 @@ export default function App() {
     }
   };
 
+  // --- LÓGICA DE ABRIR RELATÓRIO ATUALIZADA ---
   const handleOpenReport = async (date: string) => {
     const res = await fetch(`${API_URL}/reports/${user.id}/${date}`);
     if (res.ok) {
       const reports = await res.json();
-      if (reports.length > 0) setSelectedReport(reports[0]);
+      if (reports.length === 1) {
+        setSelectedReport(reports[0]); // Só um treino no dia, abre direto
+      } else if (reports.length > 1) {
+        setDaySessions(reports); // Dois ou mais treinos, abre o seletor
+      }
     }
   };
 
@@ -365,14 +365,11 @@ export default function App() {
 
       <main className="max-w-md mx-auto px-4 mt-6">
         
-        {/* =========================================
-            ABA TREINAR (NOVO FLUXO PROFISSIONAL)
-        ============================================= */}
+        {/* ABA TREINAR */}
         {activeTab === 'treinar' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
             
             {!activeSession ? (
-              /* ESTADO 1: PRÉ-TREINO (Escolha da Ficha) */
               <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
                 <h2 className="text-xl font-black mb-4 text-center">Qual o alvo de hoje?</h2>
                 
@@ -407,10 +404,7 @@ export default function App() {
 
             ) : (
 
-              /* ESTADO 2: TREINO ATIVO (Lista de Cartões e Cronômetros) */
               <div className="space-y-6">
-                
-                {/* Cabeçalho do Treino Flutuante */}
                 <div className="bg-gray-800 p-4 rounded-3xl border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.1)] text-center sticky top-4 z-30">
                   <div className="flex justify-between items-center px-2">
                     <div className="flex items-center gap-2">
@@ -429,7 +423,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Lista Ativa de Exercícios da Ficha */}
                 <div className="space-y-4">
                   {exerciciosAtuais.map(p => {
                     const exLogs = currentLogs.filter(l => l.exerciseId === p.exercise.id);
@@ -444,7 +437,6 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Visor de Séries Feitas Neste Treino */}
                         {exLogs.length > 0 && (
                           <div className="mb-4 space-y-2">
                             {exLogs.map((log, idx) => (
@@ -456,7 +448,6 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* Formulário Embutido da Série */}
                         <div className="flex gap-2 bg-gray-900 p-2 rounded-2xl border border-gray-700">
                           <input 
                             type="number" 
@@ -493,10 +484,6 @@ export default function App() {
           </div>
         )}
 
-        {/* =========================================
-            RESTANTE DAS ABAS (Mantidas Intactas)
-        ============================================= */}
-        
         {/* ABA FICHAS */}
         {activeTab === 'fichas' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
@@ -603,6 +590,33 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* MODAL SELETOR DE TREINOS DO DIA (NOVO) */}
+      {daySessions && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in">
+          <div className="bg-gray-900 p-6 rounded-3xl border border-gray-700 max-w-sm w-full shadow-2xl">
+            <h3 className="text-xl font-bold mb-4 text-white text-center">Treinos do Dia</h3>
+            <div className="space-y-3">
+              {daySessions.map((sess, i) => (
+                <button 
+                  key={sess.id} 
+                  onClick={() => {
+                    setSelectedReport(sess);
+                    setDaySessions(null);
+                  }}
+                  className="w-full bg-gray-800 p-4 rounded-xl flex justify-between items-center border border-gray-700 hover:bg-blue-600 transition-colors group"
+                >
+                  <span className="font-bold text-white">Sessão {i + 1}</span>
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">
+                    {new Date(sess.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setDaySessions(null)} className="w-full mt-4 p-3 font-bold text-gray-500 hover:text-white uppercase tracking-widest text-xs transition-colors">Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {/* MODAL BIBLIOTECA & CRIAÇÃO */}
       {isLibraryOpen && (
