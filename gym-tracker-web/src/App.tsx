@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { toBlob } from 'html-to-image';
 
-const API_URL = "https://gym-tracker-api-yomc.onrender.com"; 
+const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
 // --- COMPONENTE DO RELATÓRIO PRINTÁVEL ---
 function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: any) {
@@ -12,7 +12,7 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
   const startTime = new Date(sessionData.startTime);
   const endTime = new Date(sessionData.endTime);
   const durationMin = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
-  
+
   const exercisesMap: any = {};
   const musculosTrabalhados = new Set<string>();
 
@@ -315,7 +315,7 @@ export default function App() {
                   const iso = d.toISOString().split('T')[0];
                   const treinou = frequency.includes(iso);
                   return (
-                    <button 
+                    <button
                       key={iso}
                       onClick={() => treinou && handleOpenReport(iso)}
                       className={`w-[11.5%] aspect-square rounded-md text-[9px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/20' : 'bg-gray-800 text-gray-600'}`}
@@ -328,14 +328,14 @@ export default function App() {
             </div>
             {/* Histórico de Peso Simples */}
             <div className="bg-gray-900 p-6 rounded-3xl border border-gray-800 h-64">
-               <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase">Massa Corporal</h3>
-               <ResponsiveContainer width="100%" height="80%">
-                  <LineChart data={weightHistory.map((w:any) => ({ ...w, d: new Date(w.data).getDate() }))}>
-                    <XAxis dataKey="d" stroke="#4B5563" fontSize={10} />
-                    <Tooltip contentStyle={{ background: '#111827', border: 'none', borderRadius: '12px' }} />
-                    <Line type="monotone" dataKey="peso" stroke="#3B82F6" strokeWidth={3} dot={false} />
-                  </LineChart>
-               </ResponsiveContainer>
+              <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase">Massa Corporal</h3>
+              <ResponsiveContainer width="100%" height="80%">
+                <LineChart data={weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }))}>
+                  <XAxis dataKey="d" stroke="#4B5563" fontSize={10} />
+                  <Tooltip contentStyle={{ background: '#111827', border: 'none', borderRadius: '12px' }} />
+                  <Line type="monotone" dataKey="peso" stroke="#3B82F6" strokeWidth={3} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
         )}
@@ -372,16 +372,16 @@ export default function App() {
 
       {/* MODAL RELATÓRIO */}
       {selectedReport && (
-        <ReportModal 
-          sessionData={selectedReport} 
-          allExercises={library} 
-          onClose={() => setSelectedReport(null)} 
+        <ReportModal
+          sessionData={selectedReport}
+          allExercises={library}
+          onClose={() => setSelectedReport(null)}
           onShare={shareReport}
           onDelete={async () => {
-             if(confirm("Excluir treino?")) {
-               await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
-               setSelectedReport(null); fetchData();
-             }
+            if (confirm("Excluir treino?")) {
+              await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
+              setSelectedReport(null); fetchData();
+            }
           }}
         />
       )}
