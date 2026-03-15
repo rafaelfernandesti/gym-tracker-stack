@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { LineChart, Line, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { toBlob } from 'html-to-image';
 
 const API_URL = "https://gym-tracker-api-yomc.onrender.com";
@@ -77,6 +77,7 @@ export default function App() {
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [weightHistory, setWeightHistory] = useState<any[]>([]);
   const [frequency, setFrequency] = useState<string[]>([]);
+  const [volumeHistory, setVolumeHistory] = useState<any[]>([]);
 
   // UI
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -93,8 +94,9 @@ export default function App() {
   const [novoExGrupo, setNovoExGrupo] = useState('Peito');
   const [novoPeso, setNovoPeso] = useState('');
 
-  // Cronômetro
+  // Cronômetros
   const [elapsedTime, setElapsedTime] = useState('00:00');
+  const [restTime, setRestTime] = useState(0);
 
   useEffect(() => {
     const saved = localStorage.getItem('@GymTracker:user');
@@ -107,7 +109,7 @@ export default function App() {
     if (user) fetchData();
   }, [user]);
 
-  // Cronômetro
+  // Cronômetro Geral do Treino
   useEffect(() => {
     let interval: any;
     if (activeSession) {
@@ -125,18 +127,28 @@ export default function App() {
     return () => clearInterval(interval);
   }, [activeSession]);
 
+  // Cronômetro Regressivo de Descanso
+  useEffect(() => {
+    if (restTime > 0) {
+      const timerId = setTimeout(() => setRestTime(restTime - 1), 1000);
+      return () => clearTimeout(timerId);
+    }
+  }, [restTime]);
+
   const fetchData = async () => {
     try {
-      const [libRes, planRes, weightRes, freqRes] = await Promise.all([
+      const [libRes, planRes, weightRes, freqRes, volRes] = await Promise.all([
         fetch(`${API_URL}/exercises/${user.id}`),
         fetch(`${API_URL}/plans/${user.id}`),
         fetch(`${API_URL}/weight/${user.id}`),
-        fetch(`${API_URL}/logs/frequency/${user.id}`)
+        fetch(`${API_URL}/logs/frequency/${user.id}`),
+        fetch(`${API_URL}/volume/${user.id}`) // Nova rota
       ]);
       if (libRes.ok) setLibrary(await libRes.json());
       if (planRes.ok) setMyPlans(await planRes.json());
       if (weightRes.ok) setWeightHistory(await weightRes.json());
       if (freqRes.ok) setFrequency(await freqRes.json());
+      if (volRes.ok) setVolumeHistory(await volRes.json());
     } catch (e) { console.error("Erro ao carregar dados"); }
   };
 
@@ -177,6 +189,7 @@ export default function App() {
     });
     if (res.ok) {
       setActiveSession(null);
+      setRestTime(0);
       localStorage.removeItem('@GymTracker:activeSession');
       fetchData();
       alert("Treino salvo com sucesso!");
@@ -199,6 +212,7 @@ export default function App() {
     });
     if (res.ok) {
       setCarga(''); setReps('');
+      setRestTime(60); // Inicia o cronômetro de 60 segundos
     }
   };
 
@@ -334,6 +348,17 @@ export default function App() {
               )}
             </div>
 
+            {/* CRONÔMETRO DE DESCANSO VISUAL */}
+            {restTime > 0 && (
+              <div className="bg-blue-900/30 border border-blue-500/50 p-4 rounded-2xl text-center animate-pulse">
+                <p className="text-blue-400 text-[10px] font-bold uppercase mb-1 tracking-widest">Tempo de Descanso</p>
+                <p className="text-3xl font-black font-mono text-white">
+                  00:{restTime.toString().padStart(2, '0')}
+                </p>
+                <button onClick={() => setRestTime(0)} className="text-[10px] text-gray-400 mt-2 uppercase underline hover:text-white">Pular Descanso</button>
+              </div>
+            )}
+
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
               <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
                 {['A', 'B', 'C'].map(f => (
@@ -387,10 +412,44 @@ export default function App() {
           </div>
         )}
 
-        {/* ABA EVOLUÇÃO (Restaurada e Isolada) */}
+        {/* ABA EVOLUÇÃO */}
         {activeTab === 'evolucao' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
+
+            {/* NOVO: Gráfico de Volume Total de Carga */}
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-64 flex flex-col">
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Total de Carga (kg)</h3>
+              <div className="flex-1 min-h-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={volumeHistory.map((v: any) => ({ ...v, d: new Date(v.data).getDate() }))}>
+                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                    <Bar dataKey="volume" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-80 flex flex-col">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
+                <form onSubmit={handleRegistrarPeso} className="flex gap-2">
+                  <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
+                  <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
+                </form>
+              </div>
+              <div className="flex-1 min-h-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }))}>
+                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                    <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg mb-8">
               <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Frequência Mensal</h3>
               <div className="flex flex-wrap gap-2 justify-center">
                 {Array.from({ length: 30 }).map((_, i) => {
@@ -409,29 +468,10 @@ export default function App() {
                 })}
               </div>
             </div>
-
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-80 flex flex-col">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
-                <form onSubmit={handleRegistrarPeso} className="flex gap-2">
-                  <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
-                  <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
-                </form>
-              </div>
-              <div className="flex-1 min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }))}>
-                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
-                    <Line type="monotone" dataKey="peso" stroke="#3B82F6" strokeWidth={4} dot={{ r: 4, fill: '#3B82F6', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
           </div>
         )}
 
-        {/* ABA PERFIL (Minimalista) */}
+        {/* ABA PERFIL */}
         {activeTab === 'perfil' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
@@ -448,6 +488,9 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* MODAIS AQUI (Biblioteca e Relatório) ... Omitido para economizar espaço, o código continua o mesmo que você já tem no final */}
+      {/* ... Certifique-se de copiar o bloco {isLibraryOpen && ...} e {selectedReport && ...} que já estavam no arquivo anterior! */}
 
       {/* MODAL BIBLIOTECA & CRIAÇÃO */}
       {isLibraryOpen && (
@@ -521,6 +564,7 @@ export default function App() {
           </div>
         </div>
       )}
+
       {/* MODAL RELATÓRIO */}
       {selectedReport && (
         <ReportModal
@@ -536,7 +580,8 @@ export default function App() {
           }}
         />
       )}
-      {/* NAVEGAÇÃO BOTTOM (4 Abas) */}
+
+      {/* NAVEGAÇÃO BOTTOM */}
       <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 p-3 flex justify-around z-40 max-w-md mx-auto rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
         <button onClick={() => setActiveTab('treinar')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'treinar' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Treinar</button>
         <button onClick={() => setActiveTab('fichas')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'fichas' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Fichas</button>
