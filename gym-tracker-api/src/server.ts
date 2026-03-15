@@ -143,27 +143,40 @@ app.post('/users', async (req, res) => {
     }
 });
 
-// NOVA ROTA: Criar Ficha de Treino
+// 1. Buscar a Ficha do Usuário (Corrigido: removido 'items' ou 'nome')
+app.get('/plans/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const plans = await prisma.workoutPlan.findMany({
+      where: { userId },
+      include: { 
+        exercise: true // Isso traz os dados do exercício (nome, grupoMuscular)
+      },
+      orderBy: { ficha: 'asc' }
+    });
+    res.json(plans);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao buscar sua ficha.' });
+  }
+});
+
+// 2. Adicionar Exercício à Ficha (Corrigido: removido campos inexistentes)
 app.post('/plans', async (req, res) => {
-    const { userId, nome, items } = req.body;
-    try {
-        const plan = await prisma.workoutPlan.create({
-            data: {
-                userId,
-                nome,
-                items: {
-                    create: items
-                }
-            },
-            include: {
-                items: true // Faz a API devolver os itens na resposta para validação
-            }
-        });
-        res.status(201).json(plan);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Erro ao criar ficha de treino.' });
-    }
+  const { userId, exerciseId, ficha } = req.body;
+  try {
+    const plan = await prisma.workoutPlan.create({
+      data: {
+        userId,
+        exerciseId: Number(exerciseId),
+        ficha: ficha.toUpperCase()
+      }
+    });
+    res.status(201).json(plan);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao adicionar exercício à ficha.' });
+  }
 });
 // NOVA ROTA: Registrar Execução Diária (Log)
 app.post('/logs', async (req, res) => {
