@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { toBlob } from 'html-to-image';
 
-const API_URL = "https://gym-tracker-api-yomc.onrender.com";
+const API_URL = "https://gym-tracker-api-yomc.onrender.com"; 
 
 // --- COMPONENTE DO RELATÓRIO PRINTÁVEL ---
 function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: any) {
@@ -12,7 +12,7 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
   const startTime = new Date(sessionData.startTime);
   const endTime = new Date(sessionData.endTime);
   const durationMin = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
-
+  
   const exercisesMap: any = {};
   const musculosTrabalhados = new Set<string>();
 
@@ -27,29 +27,29 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in overflow-y-auto">
-      <div ref={reportRef} id="report-card" className="w-full max-w-sm bg-gray-950 p-6 rounded-3xl border-4 border-blue-600 shadow-2xl text-white">
+      <div ref={reportRef} id="report-card" className="w-full max-w-sm bg-gray-900 p-6 rounded-3xl border border-gray-700 shadow-2xl text-white">
         <header className="text-center mb-6 border-b border-gray-800 pb-4">
-          <h1 className="text-2xl font-black text-blue-500 italic">GYMTRACKER</h1>
-          <p className="text-xs text-gray-400 uppercase font-bold mt-1">Resumo de Treino</p>
+          <h1 className="text-2xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
+          <p className="text-xs text-gray-400 uppercase font-bold mt-1">Resumo de Conquista</p>
         </header>
         <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="bg-gray-800 p-4 rounded-xl text-center">
+          <div className="bg-gray-800 p-4 rounded-xl text-center border border-gray-700">
             <p className="text-gray-500 text-[10px] uppercase font-bold">Duração</p>
             <p className="text-xl font-black">{durationMin} min</p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl text-center">
-            <p className="text-gray-500 text-[10px] uppercase font-bold">Calorias Est.</p>
+          <div className="bg-gray-800 p-4 rounded-xl text-center border border-gray-700">
+            <p className="text-gray-500 text-[10px] uppercase font-bold">Queima Est.</p>
             <p className="text-xl font-black text-green-400">{sessionData.calories} kcal</p>
           </div>
         </div>
-        <div className="bg-gray-900 p-3 rounded-xl mb-4 border border-gray-800 text-center">
+        <div className="bg-gray-950 p-3 rounded-xl mb-4 border border-gray-800 text-center">
           <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Foco do Dia</p>
           <p className="text-sm font-bold">{Array.from(musculosTrabalhados).join(', ') || 'Geral'}</p>
         </div>
         <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
           {Object.keys(exercisesMap).map(nome => (
-            <div key={nome} className="flex justify-between text-sm bg-gray-900 p-2 rounded-lg">
-              <span className="font-medium">{nome}</span>
+            <div key={nome} className="flex justify-between text-sm bg-gray-800 p-3 rounded-lg border border-gray-700">
+              <span className="font-bold">{nome}</span>
               <span className="text-gray-400">{exercisesMap[nome].length} séries</span>
             </div>
           ))}
@@ -57,9 +57,9 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
       </div>
       <div className="flex gap-3 mt-6 w-full max-w-sm">
         <button onClick={onClose} className="flex-1 bg-gray-700 py-3 rounded-xl font-bold">FECHAR</button>
-        <button onClick={onShare} className="flex-1 bg-green-600 py-3 rounded-xl font-bold">WHATSAPP</button>
+        <button onClick={onShare} className="flex-1 bg-green-600 py-3 rounded-xl font-bold">COMPARTILHAR</button>
       </div>
-      <button onClick={onDelete} className="mt-4 text-red-500 text-xs font-bold uppercase opacity-50">Excluir Registro</button>
+      <button onClick={onDelete} className="mt-4 text-red-500 text-xs font-bold uppercase">Excluir Registro</button>
     </div>
   );
 }
@@ -80,12 +80,20 @@ export default function App() {
 
   // UI
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [libTab, setLibTab] = useState<'global' | 'custom'>('global');
   const [isLogin, setIsLogin] = useState(true);
+  
+  // Formulários
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [carga, setCarga] = useState('');
   const [reps, setReps] = useState('');
   const [exSelecionado, setExSelecionado] = useState('');
+  const [novoExNome, setNovoExNome] = useState('');
+  const [novoExGrupo, setNovoExGrupo] = useState('Peito');
+
+  // Cronômetro
+  const [elapsedTime, setElapsedTime] = useState('00:00');
 
   useEffect(() => {
     const saved = localStorage.getItem('@GymTracker:user');
@@ -95,10 +103,26 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (user) {
-      fetchData();
-    }
+    if (user) fetchData();
   }, [user]);
+
+  // Lógica do Cronômetro
+  useEffect(() => {
+    let interval: any;
+    if (activeSession) {
+      interval = setInterval(() => {
+        const start = new Date(activeSession.startTime).getTime();
+        const now = new Date().getTime();
+        const diff = Math.floor((now - start) / 1000);
+        const m = Math.floor(diff / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        setElapsedTime(`${m}:${s}`);
+      }, 1000);
+    } else {
+      setElapsedTime('00:00');
+    }
+    return () => clearInterval(interval);
+  }, [activeSession]);
 
   const fetchData = async () => {
     try {
@@ -174,7 +198,7 @@ export default function App() {
     });
     if (res.ok) {
       setCarga(''); setReps('');
-      alert("Série registrada!");
+      // alert("Série registrada!"); (Removido para fluxo mais rápido)
     }
   };
 
@@ -194,6 +218,21 @@ export default function App() {
     if (!confirm("Remover da ficha?")) return;
     await fetch(`${API_URL}/plans/${id}`, { method: 'DELETE' });
     fetchData();
+  };
+
+  const handleCreateCustomExercise = async (e: any) => {
+    e.preventDefault();
+    if (!novoExNome) return;
+    const res = await fetch(`${API_URL}/exercises`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: novoExNome, grupoMuscular: novoExGrupo, userId: user.id })
+    });
+    if (res.ok) {
+      fetchData();
+      setNovoExNome('');
+      alert("Exercício criado com sucesso!");
+    }
   };
 
   const handleOpenReport = async (date: string) => {
@@ -217,17 +256,23 @@ export default function App() {
     }
   };
 
+  // --- TELA DE LOGIN RESTAURADA ---
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6 text-white">
-        <div className="w-full max-w-sm bg-gray-900 p-8 rounded-3xl border border-gray-800">
-          <h1 className="text-3xl font-black text-blue-500 mb-8 text-center italic">GYMTRACKER</h1>
+      <div className="min-h-screen bg-gray-900 flex flex-col justify-center p-4 text-white">
+        <div className="max-w-md mx-auto w-full bg-gray-800 p-8 rounded-2xl border border-gray-700 shadow-2xl">
+          <div className="flex flex-col items-center justify-center mb-8">
+            <img src="/logo.png" alt="GymTracker Logo" className="w-20 h-20 mb-4 rounded-xl shadow-lg" onError={(e) => e.currentTarget.style.display = 'none'} />
+            <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
+            <p className="text-gray-400 text-sm mt-2">O seu treino, no seu controle.</p>
+          </div>
+          
           <form onSubmit={handleAuth} className="space-y-4">
-            <input type="email" placeholder="E-mail" className="w-full bg-gray-800 p-4 rounded-2xl outline-none" value={email} onChange={e => setEmail(e.target.value)} />
-            <input type="password" placeholder="Senha" className="w-full bg-gray-800 p-4 rounded-2xl outline-none" value={senha} onChange={e => setSenha(e.target.value)} />
-            <button className="w-full bg-blue-600 py-4 rounded-2xl font-bold uppercase">{isLogin ? 'Entrar' : 'Cadastrar'}</button>
+            <input type="email" placeholder="E-mail" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={email} onChange={e => setEmail(e.target.value)} />
+            <input type="password" placeholder="Senha" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={senha} onChange={e => setSenha(e.target.value)} />
+            <button className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-xl font-bold uppercase transition-colors">{isLogin ? 'Entrar' : 'Cadastrar'}</button>
           </form>
-          <button onClick={() => setIsLogin(!isLogin)} className="w-full mt-6 text-gray-500 text-sm">{isLogin ? 'Criar conta' : 'Já tenho conta'}</button>
+          <button onClick={() => setIsLogin(!isLogin)} className="w-full mt-6 text-gray-400 text-sm hover:text-white transition-colors">{isLogin ? 'Criar nova conta' : 'Já tenho conta'}</button>
         </div>
       </div>
     );
@@ -237,42 +282,50 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white pb-28 font-sans">
-      <header className="p-6 flex justify-between items-center max-w-md mx-auto">
-        <h1 className="text-xl font-black text-blue-500 italic tracking-tighter">GYMTRACKER</h1>
-        <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-[10px] font-bold text-red-500 border border-red-500/30 px-2 py-1 rounded">SAIR</button>
+      {/* HEADER RESTAURADO */}
+      <header className="p-6 flex justify-between items-center max-w-md mx-auto border-b border-gray-900">
+        <div className="flex items-center gap-3">
+          <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-md" onError={(e) => e.currentTarget.style.display = 'none'} />
+          <h1 className="text-xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
+        </div>
+        <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-xs font-bold text-red-500 uppercase">Sair</button>
       </header>
 
-      <main className="max-w-md mx-auto px-4">
+      <main className="max-w-md mx-auto px-4 mt-6">
         {/* TREINAR */}
         {activeTab === 'treinar' && (
-          <div className="space-y-6">
-            <div className="bg-gray-900 p-5 rounded-3xl border border-gray-800 text-center">
+          <div className="space-y-6 animate-in slide-in-from-bottom">
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 text-center shadow-lg">
               {activeSession ? (
                 <div>
-                  <div className="text-xs text-green-400 font-bold mb-3 animate-pulse">SESSÃO ATIVA</div>
-                  <button onClick={handleEndWorkout} className="w-full bg-red-600 py-4 rounded-2xl font-bold">FINALIZAR TREINO</button>
+                  <div className="flex justify-center items-center gap-2 mb-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-green-400 font-bold text-sm">TREINO EM ANDAMENTO</span>
+                  </div>
+                  <div className="text-4xl font-black font-mono mb-4 text-white tracking-widest">{elapsedTime}</div>
+                  <button onClick={handleEndWorkout} className="w-full bg-red-600 py-3 rounded-xl font-bold">FINALIZAR TREINO</button>
                 </div>
               ) : (
-                <button onClick={handleStartWorkout} className="w-full bg-blue-600 py-4 rounded-2xl font-bold uppercase">Iniciar Cronômetro</button>
+                <button onClick={handleStartWorkout} className="w-full bg-blue-600 hover:bg-blue-700 transition-colors py-4 rounded-xl font-bold uppercase tracking-widest">Iniciar Treino</button>
               )}
             </div>
 
-            <div className="bg-gray-900 p-6 rounded-3xl border border-gray-800">
-              <div className="flex gap-2 mb-6">
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
+              <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
                 {['A', 'B', 'C'].map(f => (
-                  <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-xl font-bold ${fichaAtiva === f ? 'bg-blue-600' : 'bg-gray-800 text-gray-500'}`}>Ficha {f}</button>
+                  <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-lg font-bold transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-white'}`}>Ficha {f}</button>
                 ))}
               </div>
               <form onSubmit={handleAddSerie} className="space-y-4">
-                <select className="w-full bg-gray-800 p-4 rounded-2xl" value={exSelecionado} onChange={e => setExSelecionado(e.target.value)}>
-                  <option value="">Escolha o exercício...</option>
+                <select className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={exSelecionado} onChange={e => setExSelecionado(e.target.value)}>
+                  <option value="">Selecione o exercício...</option>
                   {exerciciosAtuais.map(p => <option key={p.id} value={p.exercise.id}>{p.exercise.nome}</option>)}
                 </select>
                 <div className="grid grid-cols-2 gap-4">
-                  <input type="number" placeholder="Peso (kg)" className="bg-gray-800 p-4 rounded-2xl" value={carga} onChange={e => setCarga(e.target.value)} />
-                  <input type="number" placeholder="Reps" className="bg-gray-800 p-4 rounded-2xl" value={reps} onChange={e => setReps(e.target.value)} />
+                  <input type="number" placeholder="Carga (kg)" className="bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={carga} onChange={e => setCarga(e.target.value)} />
+                  <input type="number" placeholder="Reps" className="bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={reps} onChange={e => setReps(e.target.value)} />
                 </div>
-                <button disabled={!activeSession} className="w-full bg-blue-600 py-4 rounded-2xl font-bold disabled:opacity-20 uppercase">Salvar Série</button>
+                <button disabled={!activeSession} className="w-full bg-blue-600 py-4 rounded-xl font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-all">REGISTRAR SÉRIE</button>
               </form>
             </div>
           </div>
@@ -280,45 +333,51 @@ export default function App() {
 
         {/* MINHAS FICHAS */}
         {activeTab === 'fichas' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Treino {fichaAtiva}</h2>
-              <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-2 rounded-xl text-xs font-bold">+ ADICIONAR</button>
+          <div className="space-y-6 animate-in slide-in-from-bottom">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-xl font-bold">Configurar Fichas</h2>
+              <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-blue-500/30">+ EXERCÍCIO</button>
             </div>
-            <div className="flex gap-2 mb-4">
+            
+            <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
               {['A', 'B', 'C'].map(f => (
-                <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-xl font-bold text-xs ${fichaAtiva === f ? 'bg-blue-600' : 'bg-gray-900'}`}>{f}</button>
+                <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Ficha {f}</button>
               ))}
             </div>
+
             <div className="space-y-3">
-              {exerciciosAtuais.map(p => (
-                <div key={p.id} className="bg-gray-900 p-4 rounded-2xl border border-gray-800 flex justify-between items-center">
+              {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
+                <div key={p.id} className="bg-gray-800 p-4 rounded-2xl border border-gray-700 flex justify-between items-center shadow-sm">
                   <div>
-                    <p className="font-bold">{p.exercise.nome}</p>
-                    <p className="text-[10px] text-gray-500 uppercase font-bold">{p.exercise.grupoMuscular}</p>
+                    <p className="font-bold text-white">{p.exercise.nome}</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{p.exercise.grupoMuscular}</p>
                   </div>
-                  <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 p-2">✕</button>
+                  <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors">✕</button>
                 </div>
-              ))}
+              )) : (
+                <div className="text-center py-10 bg-gray-800/50 rounded-2xl border border-gray-800 border-dashed">
+                  <p className="text-gray-500">Nenhum exercício na Ficha {fichaAtiva}.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {/* PERFIL & FREQUÊNCIA */}
         {activeTab === 'perfil' && (
-          <div className="space-y-6">
-            <div className="bg-gray-900 p-6 rounded-3xl border border-gray-800">
-              <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase">Frequência Mensal</h3>
-              <div className="flex flex-wrap gap-2">
+          <div className="space-y-6 animate-in slide-in-from-bottom">
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
+              <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Frequência Mensal</h3>
+              <div className="flex flex-wrap gap-2 justify-center">
                 {Array.from({ length: 30 }).map((_, i) => {
                   const d = new Date(); d.setDate(d.getDate() - (29 - i));
                   const iso = d.toISOString().split('T')[0];
                   const treinou = frequency.includes(iso);
                   return (
-                    <button
+                    <button 
                       key={iso}
                       onClick={() => treinou && handleOpenReport(iso)}
-                      className={`w-[11.5%] aspect-square rounded-md text-[9px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/20' : 'bg-gray-800 text-gray-600'}`}
+                      className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
                     >
                       {d.getDate()}
                     </button>
@@ -326,77 +385,90 @@ export default function App() {
                 })}
               </div>
             </div>
-            {/* Histórico de Peso Simples */}
-            <div className="bg-gray-900 p-6 rounded-3xl border border-gray-800 h-64">
-              <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase">Massa Corporal</h3>
-              <ResponsiveContainer width="100%" height="80%">
-                <LineChart data={weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }))}>
-                  <XAxis dataKey="d" stroke="#4B5563" fontSize={10} />
-                  <Tooltip contentStyle={{ background: '#111827', border: 'none', borderRadius: '12px' }} />
-                  <Line type="monotone" dataKey="peso" stroke="#3B82F6" strokeWidth={3} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+            
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-64">
+               <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Evolução de Peso</h3>
+               <ResponsiveContainer width="100%" height="80%">
+                  <LineChart data={weightHistory.map((w:any) => ({ ...w, d: new Date(w.data).getDate() }))}>
+                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                    <Line type="monotone" dataKey="peso" stroke="#3B82F6" strokeWidth={4} dot={{ r: 4, fill: '#3B82F6', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
+                  </LineChart>
+               </ResponsiveContainer>
             </div>
           </div>
         )}
       </main>
 
-      {/* MODAL BIBLIOTECA */}
+      {/* MODAL BIBLIOTECA & CRIAÇÃO */}
       {isLibraryOpen && (
-        <div className="fixed inset-0 bg-black z-50 flex flex-col p-6 animate-in slide-in-from-bottom duration-300">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-black italic">BIBLIOTECA</h2>
-            <button onClick={() => setIsLibraryOpen(false)} className="text-3xl">&times;</button>
+        <div className="fixed inset-0 bg-gray-950 z-50 flex flex-col animate-in slide-in-from-bottom duration-200">
+          <header className="p-6 flex justify-between items-center border-b border-gray-800 bg-gray-900">
+            <h2 className="text-xl font-bold">Adicionar Exercício</h2>
+            <button onClick={() => setIsLibraryOpen(false)} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+          </header>
+
+          <div className="flex bg-gray-900 border-b border-gray-800 p-2">
+            <button onClick={() => setLibTab('global')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors ${libTab === 'global' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Biblioteca</button>
+            <button onClick={() => setLibTab('custom')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors ${libTab === 'custom' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Meus Exercícios</button>
           </div>
-          <div className="flex-1 overflow-y-auto space-y-8 scrollbar-hide">
-            {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(grupo => (
-              <div key={grupo}>
-                <h3 className="text-blue-500 text-[10px] font-black uppercase mb-3 tracking-widest">{grupo}</h3>
-                <div className="space-y-2">
-                  {library.filter(ex => ex.grupoMuscular === grupo).map(ex => (
-                    <div key={ex.id} className="bg-gray-900 p-4 rounded-2xl flex justify-between items-center border border-gray-800">
-                      <span className="font-bold text-sm">{ex.nome}</span>
-                      <div className="flex gap-1">
-                        {['A', 'B', 'C'].map(f => (
-                          <button key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-800 px-3 py-1 rounded-lg text-[10px] font-black hover:bg-blue-600">+{f}</button>
-                        ))}
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-20">
+            {libTab === 'global' ? (
+              ['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(grupo => (
+                <div key={grupo}>
+                  <h3 className="text-blue-500 text-[11px] font-black uppercase mb-3 tracking-widest">{grupo}</h3>
+                  <div className="space-y-2">
+                    {library.filter(ex => ex.grupoMuscular === grupo).map(ex => (
+                      <div key={ex.id} className="bg-gray-800 p-4 rounded-2xl flex justify-between items-center border border-gray-700">
+                        <span className="font-bold text-sm text-white">{ex.nome}</span>
+                        <div className="flex gap-1">
+                          {['A', 'B', 'C'].map(f => (
+                            <button key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors">+{f}</button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700">
+                <h3 className="text-lg font-bold mb-4">Criar Novo Exercício</h3>
+                <form onSubmit={handleCreateCustomExercise} className="space-y-4">
+                  <input type="text" placeholder="Nome do exercício" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExNome} onChange={e => setNovoExNome(e.target.value)} required />
+                  <select className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExGrupo} onChange={e => setNovoExGrupo(e.target.value)}>
+                    {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                  <button className="w-full bg-green-600 py-4 rounded-xl font-bold">SALVAR EXERCÍCIO</button>
+                </form>
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
 
       {/* MODAL RELATÓRIO */}
       {selectedReport && (
-        <ReportModal
-          sessionData={selectedReport}
-          allExercises={library}
-          onClose={() => setSelectedReport(null)}
+        <ReportModal 
+          sessionData={selectedReport} 
+          allExercises={library} 
+          onClose={() => setSelectedReport(null)} 
           onShare={shareReport}
           onDelete={async () => {
-            if (confirm("Excluir treino?")) {
-              await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
-              setSelectedReport(null); fetchData();
-            }
+             if(confirm("Excluir treino?")) {
+               await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
+               setSelectedReport(null); fetchData();
+             }
           }}
         />
       )}
 
-      {/* NAVEGAÇÃO */}
-      <nav className="fixed bottom-6 left-6 right-6 bg-gray-900/90 backdrop-blur-xl border border-gray-800 p-2 flex justify-around rounded-full shadow-2xl z-40 max-w-md mx-auto">
-        <button onClick={() => setActiveTab('treinar')} className={`p-4 rounded-full transition-all ${activeTab === 'treinar' ? 'bg-blue-600 shadow-lg shadow-blue-500/40' : 'text-gray-500'}`}>
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-        </button>
-        <button onClick={() => setActiveTab('fichas')} className={`p-4 rounded-full transition-all ${activeTab === 'fichas' ? 'bg-blue-600 shadow-lg shadow-blue-500/40' : 'text-gray-500'}`}>
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 0h6" /></svg>
-        </button>
-        <button onClick={() => setActiveTab('perfil')} className={`p-4 rounded-full transition-all ${activeTab === 'perfil' ? 'bg-blue-600 shadow-lg shadow-blue-500/40' : 'text-gray-500'}`}>
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-        </button>
+      {/* NAVEGAÇÃO BOTTOM RESTAURADA (Estilo App Nativo) */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 p-3 flex justify-around z-40 max-w-md mx-auto rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        <button onClick={() => setActiveTab('treinar')} className={`p-3 px-6 rounded-2xl font-bold text-sm transition-colors ${activeTab === 'treinar' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Treinar</button>
+        <button onClick={() => setActiveTab('fichas')} className={`p-3 px-6 rounded-2xl font-bold text-sm transition-colors ${activeTab === 'fichas' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Fichas</button>
+        <button onClick={() => setActiveTab('perfil')} className={`p-3 px-6 rounded-2xl font-bold text-sm transition-colors ${activeTab === 'perfil' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Perfil</button>
       </nav>
     </div>
   );
