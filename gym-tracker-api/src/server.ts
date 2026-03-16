@@ -502,7 +502,19 @@ app.get('/logs/last/:userId', async (req, res) => {
         res.status(500).json({ error: 'Erro ao buscar histórico fantasma.' });
     }
 });
-
+// 7. Excluir uma série registrada por engano
+app.delete('/logs/:logId', async (req, res) => {
+    const { logId } = req.params;
+    try {
+        await prisma.workoutLog.delete({
+            where: { id: Number(logId) }
+        });
+        res.json({ message: 'Série removida com sucesso' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao remover série.' });
+    }
+});
 
 const PORT = process.env.PORT || 3000;
 
