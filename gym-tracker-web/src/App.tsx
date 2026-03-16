@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { toBlob } from 'html-to-image';
 
-const API_URL = "https://gym-tracker-api-yomc.onrender.com"; 
+const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
 // --- FUNÇÃO DE ALARME DO DESCANSO (NATIVA) ---
 const dispararAlarmeDescanso = () => {
@@ -18,13 +18,13 @@ const dispararAlarmeDescanso = () => {
       const ctx = new AudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      
+
       osc.type = 'triangle'; // Timbre suave e focado
       osc.frequency.setValueAtTime(800, ctx.currentTime); // Frequência do Beep
-      
+
       gain.gain.setValueAtTime(0.5, ctx.currentTime); // Volume inicial
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5); // Fade out suave
-      
+
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
@@ -36,6 +36,7 @@ const dispararAlarmeDescanso = () => {
 };
 
 // --- COMPONENTE DO RELATÓRIO PRINTÁVEL ---
+// --- COMPONENTE DO RELATÓRIO PRINTÁVEL (ATUALIZADO) ---
 function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: any) {
   const reportRef = useRef<HTMLDivElement>(null);
   if (!sessionData) return null;
@@ -43,54 +44,109 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
   const startTime = new Date(sessionData.startTime);
   const endTime = new Date(sessionData.endTime);
   const durationMin = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
-  
+
+  // ITEM 7: Formatação da data para o relatório
+  const dataFormatada = startTime.toLocaleDateString('pt-PT', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+
   const exercisesMap: any = {};
   const musculosTrabalhados = new Set<string>();
 
+  // ITEM 8: Lógica para calcular a carga máxima e quantidade de séries de cada exercício
   sessionData.logs.forEach((log: any) => {
     const exerciseData = log.exercise || allExercises.find((ex: any) => ex.id === log.exerciseId);
     const exNome = exerciseData?.nome || 'Exercício';
     const grupo = exerciseData?.grupoMuscular;
-    if (!exercisesMap[exNome]) exercisesMap[exNome] = [];
-    exercisesMap[exNome].push(log);
+
+    if (!exercisesMap[exNome]) {
+      exercisesMap[exNome] = { series: 0, maxCarga: 0, grupo };
+    }
+    exercisesMap[exNome].series += 1;
+    if (log.carga > exercisesMap[exNome].maxCarga) {
+      exercisesMap[exNome].maxCarga = log.carga;
+    }
+
     if (grupo) musculosTrabalhados.add(grupo);
   });
 
+  // Ordena os exercícios pela carga máxima e pega apenas os 3 primeiros (Destaques)
+  const sortedExercises = Object.entries(exercisesMap).sort((a: any, b: any) => b[1].maxCarga - a[1].maxCarga);
+  const top3 = sortedExercises.slice(0, 3);
+  const outrosCount = sortedExercises.length > 3 ? sortedExercises.length - 3 : 0;
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in overflow-y-auto">
-      <div ref={reportRef} id="report-card" className="w-full max-w-sm bg-gray-900 p-6 rounded-3xl border border-gray-700 shadow-2xl text-white">
-        <header className="text-center mb-6 border-b border-gray-800 pb-4">
-          <h1 className="text-2xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
-          <p className="text-xs text-gray-400 uppercase font-bold mt-1">Resumo de Conquista</p>
+    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in overflow-y-auto">
+      <div ref={reportRef} id="report-card" className="w-full max-w-sm bg-gray-900 p-8 rounded-[2rem] border border-gray-700 shadow-2xl text-white relative overflow-hidden">
+
+        {/* Fundo com gradiente subtil */}
+        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-blue-600/20 to-transparent"></div>
+
+        <header className="text-center mb-6 relative z-10">
+          <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
+          <p className="text-xs text-gray-400 uppercase font-bold mt-2 tracking-widest">Resumo de Conquista</p>
+          <p className="text-sm text-gray-200 mt-1 font-medium">{dataFormatada}</p>
         </header>
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="bg-gray-800 p-4 rounded-xl text-center border border-gray-700">
-            <p className="text-gray-500 text-[10px] uppercase font-bold">Duração</p>
-            <p className="text-xl font-black">{durationMin} min</p>
+
+        <div className="grid grid-cols-2 gap-4 mb-6 relative z-10">
+          <div className="bg-gray-800/80 backdrop-blur-md p-4 rounded-2xl text-center border border-gray-700 shadow-inner">
+            <p className="text-gray-500 text-[10px] uppercase font-bold tracking-wider mb-1">Duração</p>
+            <p className="text-2xl font-black">{durationMin} <span className="text-sm font-normal text-gray-400">min</span></p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl text-center border border-gray-700">
-            <p className="text-gray-500 text-[10px] uppercase font-bold">Queima Est.</p>
-            <p className="text-xl font-black text-green-400">{sessionData.calories || Math.round(durationMin * 6.5)} kcal</p>
+          <div className="bg-gray-800/80 backdrop-blur-md p-4 rounded-2xl text-center border border-gray-700 shadow-inner">
+            <p className="text-gray-500 text-[10px] uppercase font-bold tracking-wider mb-1">Queima Est.</p>
+            <p className="text-2xl font-black text-green-400">{sessionData.calories || Math.round(durationMin * 6.5)} <span className="text-sm font-normal text-gray-500">kcal</span></p>
           </div>
         </div>
-        <div className="bg-gray-950 p-3 rounded-xl mb-4 border border-gray-800 text-center">
-          <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Foco do Dia</p>
-          <p className="text-sm font-bold">{Array.from(musculosTrabalhados).join(', ') || 'Geral'}</p>
+
+        <div className="bg-gray-950 p-4 rounded-2xl mb-6 border border-gray-800 text-center relative z-10">
+          <p className="text-[10px] text-gray-500 uppercase font-bold mb-3 tracking-widest">Músculos Focados</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {Array.from(musculosTrabalhados).map(m => (
+              <span key={m} className="bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-full text-xs font-black border border-blue-500/30 uppercase tracking-wider">
+                {m}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-          {Object.keys(exercisesMap).map(nome => (
-            <div key={nome} className="flex justify-between text-sm bg-gray-800 p-3 rounded-lg border border-gray-700">
-              <span className="font-bold">{nome}</span>
-              <span className="text-gray-400">{exercisesMap[nome].length} séries</span>
+
+        <div className="relative z-10">
+          <p className="text-[10px] text-gray-500 uppercase font-bold mb-3 tracking-widest text-center">Destaques do Treino</p>
+          <div className="space-y-3">
+            {top3.map(([nome, dados]: any, idx) => (
+              <div key={nome} className="flex justify-between items-center bg-gray-800 p-3 px-4 rounded-xl border border-gray-700">
+                <div className="flex items-center gap-3">
+                  <span className="text-blue-500 font-black text-lg w-4">{idx + 1}º</span>
+                  <div>
+                    <span className="font-bold text-sm block text-white">{nome}</span>
+                    <span className="text-[10px] text-gray-400">{dados.series} séries completas</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="block text-sm font-black text-white">{dados.maxCarga}kg</span>
+                  <span className="text-[9px] text-gray-500 uppercase font-bold">Carga Máx</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {outrosCount > 0 && (
+            <div className="mt-4 text-center">
+              <span className="text-[10px] text-gray-500 font-bold bg-gray-900 px-4 py-1.5 rounded-full border border-gray-800 uppercase tracking-wider">
+                + {outrosCount} outros exercícios
+              </span>
             </div>
-          ))}
+          )}
         </div>
       </div>
+
       <div className="flex gap-3 mt-6 w-full max-w-sm">
-        <button onClick={onClose} className="flex-1 bg-gray-700 py-3 rounded-xl font-bold">FECHAR</button>
-        <button onClick={onShare} className="flex-1 bg-green-600 py-3 rounded-xl font-bold">COMPARTILHAR</button>
+        <button onClick={onClose} className="flex-1 bg-gray-800 border border-gray-700 py-4 rounded-2xl font-bold text-gray-300 hover:text-white transition-colors">FECHAR</button>
+        <button onClick={onShare} className="flex-1 bg-blue-600 shadow-lg shadow-blue-600/30 py-4 rounded-2xl font-black tracking-wider hover:bg-blue-500 transition-colors">PARTILHAR</button>
       </div>
-      <button onClick={onDelete} className="mt-4 text-red-500 text-xs font-bold uppercase hover:text-red-400 transition-colors">Excluir Registro</button>
+      <button onClick={onDelete} className="mt-6 text-red-500/70 text-xs font-bold uppercase hover:text-red-400 transition-colors underline underline-offset-4">Excluir Registo</button>
     </div>
   );
 }
@@ -110,18 +166,18 @@ export default function App() {
   const [weightHistory, setWeightHistory] = useState<any[]>([]);
   const [frequency, setFrequency] = useState<string[]>([]);
   const [volumeHistory, setVolumeHistory] = useState<any[]>([]);
-  const [lastLogs, setLastLogs] = useState<any[]>([]); 
+  const [lastLogs, setLastLogs] = useState<any[]>([]);
 
   // UX de Treino Ativo 
   const [cargas, setCargas] = useState<Record<number, string>>({});
   const [repsSet, setRepsSet] = useState<Record<number, string>>({});
-  const [currentLogs, setCurrentLogs] = useState<{exerciseId: number, carga: number, reps: number}[]>([]);
+  const [currentLogs, setCurrentLogs] = useState<{ exerciseId: number, carga: number, reps: number }[]>([]);
 
   // UI Modais e Login
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [libTab, setLibTab] = useState<'global' | 'custom'>('global');
   const [isLogin, setIsLogin] = useState(true);
-  
+
   // Formulários
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
@@ -136,13 +192,13 @@ export default function App() {
   useEffect(() => {
     const saved = localStorage.getItem('@GymTracker:user');
     if (saved) setUser(JSON.parse(saved));
-    
+
     const sessao = localStorage.getItem('@GymTracker:activeSession');
     if (sessao) {
       const parsedSession = JSON.parse(sessao);
       setActiveSession(parsedSession);
       if (parsedSession.logs) {
-        setCurrentLogs(parsedSession.logs.map((l:any) => ({ exerciseId: l.exerciseId, carga: l.carga, reps: l.repsFeitas || l.reps })));
+        setCurrentLogs(parsedSession.logs.map((l: any) => ({ exerciseId: l.exerciseId, carga: l.carga, reps: l.repsFeitas || l.reps })));
       }
     }
   }, []);
@@ -191,7 +247,7 @@ export default function App() {
         fetch(`${API_URL}/weight/${user.id}`),
         fetch(`${API_URL}/logs/frequency/${user.id}`),
         fetch(`${API_URL}/volume/${user.id}`),
-        fetch(`${API_URL}/logs/last/${user.id}`) 
+        fetch(`${API_URL}/logs/last/${user.id}`)
       ]);
       if (libRes.ok) setLibrary(await libRes.json());
       if (planRes.ok) setMyPlans(await planRes.json());
@@ -225,14 +281,14 @@ export default function App() {
     });
     if (res.ok) {
       const data = await res.json();
-      data.logs = []; 
+      data.logs = [];
       setActiveSession(data);
       setCurrentLogs([]);
       localStorage.setItem('@GymTracker:activeSession', JSON.stringify(data));
-      
+
       // Um pequeno truque: Despertamos o Áudio do navegador no clique do botão 
       // (Navegadores bloqueiam som se não houver interação humana antes)
-      try { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); ctx.resume(); } catch(e){}
+      try { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); ctx.resume(); } catch (e) { }
     }
   };
 
@@ -256,14 +312,14 @@ export default function App() {
     if (res.ok) {
       const newLogs = [...currentLogs, { exerciseId: exId, carga: c, reps: r }];
       setCurrentLogs(newLogs);
-      
+
       const updatedSession = { ...activeSession, logs: newLogs };
       setActiveSession(updatedSession);
       localStorage.setItem('@GymTracker:activeSession', JSON.stringify(updatedSession));
 
       setCargas({ ...cargas, [exId]: '' });
       setRepsSet({ ...repsSet, [exId]: '' });
-      setRestTime(60); 
+      setRestTime(60);
     }
   };
 
@@ -277,14 +333,14 @@ export default function App() {
     if (res.ok) {
       const sessionFinalizada = await res.json();
       sessionFinalizada.logs = currentLogs;
-      
+
       setActiveSession(null);
       setCurrentLogs([]);
       setRestTime(0);
       localStorage.removeItem('@GymTracker:activeSession');
-      
-      fetchData(); 
-      setSelectedReport(sessionFinalizada); 
+
+      fetchData();
+      setSelectedReport(sessionFinalizada);
     }
   };
 
@@ -347,9 +403,9 @@ export default function App() {
     if (res.ok) {
       const reports = await res.json();
       if (reports.length === 1) {
-        setSelectedReport(reports[0]); 
+        setSelectedReport(reports[0]);
       } else if (reports.length > 1) {
-        setDaySessions(reports); 
+        setDaySessions(reports);
       }
     }
   };
@@ -376,7 +432,7 @@ export default function App() {
             <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
             <p className="text-gray-400 text-sm mt-2">O seu treino, no seu controle.</p>
           </div>
-          
+
           <form onSubmit={handleAuth} className="space-y-4">
             <input type="email" placeholder="E-mail" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={email} onChange={e => setEmail(e.target.value)} />
             <input type="password" placeholder="Senha" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={senha} onChange={e => setSenha(e.target.value)} />
@@ -404,15 +460,15 @@ export default function App() {
       </header>
 
       <main className="max-w-md mx-auto px-4 mt-6">
-        
+
         {/* ABA TREINAR */}
         {activeTab === 'treinar' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
-            
+
             {!activeSession ? (
               <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
                 <h2 className="text-xl font-black mb-4 text-center">Qual o alvo de hoje?</h2>
-                
+
                 <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
                   {['A', 'B', 'C'].map(f => (
                     <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Ficha {f}</button>
@@ -433,7 +489,7 @@ export default function App() {
                   )}
                 </div>
 
-                <button 
+                <button
                   onClick={handleStartWorkout}
                   disabled={exerciciosAtuais.length === 0}
                   className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-xl font-black uppercase tracking-widest disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-lg shadow-blue-500/30"
@@ -453,7 +509,7 @@ export default function App() {
                     </div>
                     <div className="text-2xl font-black font-mono text-white tracking-widest">{elapsedTime}</div>
                   </div>
-                  
+
                   {restTime > 0 && (
                     <div className="mt-3 bg-blue-900/40 p-2 rounded-xl border border-blue-500/30 flex justify-between items-center animate-pulse">
                       <span className="text-blue-400 text-[10px] font-bold uppercase tracking-widest pl-2">Descanso</span>
@@ -466,11 +522,11 @@ export default function App() {
                 <div className="space-y-4">
                   {exerciciosAtuais.map(p => {
                     const exLogs = currentLogs.filter(l => l.exerciseId === p.exercise.id);
-                    const fantasma = lastLogs.find(l => l.exerciseId === p.exercise.id); 
-                    
+                    const fantasma = lastLogs.find(l => l.exerciseId === p.exercise.id);
+
                     return (
                       <div key={p.id} className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-lg relative overflow-hidden">
-                        
+
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h3 className="font-black text-lg text-white leading-tight">{p.exercise.nome}</h3>
@@ -490,29 +546,29 @@ export default function App() {
                         )}
 
                         <div className="flex gap-2 bg-gray-900 p-2 rounded-2xl border border-gray-700">
-                          <input 
-                            type="number" 
-                            placeholder="kg" 
-                            value={cargas[p.exercise.id] || ''} 
-                            onChange={e => setCargas({...cargas, [p.exercise.id]: e.target.value})} 
-                            className="w-16 bg-gray-800 p-3 rounded-xl border border-gray-700 outline-none text-center font-bold text-sm" 
+                          <input
+                            type="number"
+                            placeholder="kg"
+                            value={cargas[p.exercise.id] || ''}
+                            onChange={e => setCargas({ ...cargas, [p.exercise.id]: e.target.value })}
+                            className="w-16 bg-gray-800 p-3 rounded-xl border border-gray-700 outline-none text-center font-bold text-sm"
                           />
-                          <input 
-                            type="number" 
-                            placeholder="reps" 
-                            value={repsSet[p.exercise.id] || ''} 
-                            onChange={e => setRepsSet({...repsSet, [p.exercise.id]: e.target.value})} 
-                            className="w-16 bg-gray-800 p-3 rounded-xl border border-gray-700 outline-none text-center font-bold text-sm" 
+                          <input
+                            type="number"
+                            placeholder="reps"
+                            value={repsSet[p.exercise.id] || ''}
+                            onChange={e => setRepsSet({ ...repsSet, [p.exercise.id]: e.target.value })}
+                            className="w-16 bg-gray-800 p-3 rounded-xl border border-gray-700 outline-none text-center font-bold text-sm"
                           />
-                          <button 
-                            onClick={() => handleAddSerie(p.exercise.id)} 
-                            disabled={!cargas[p.exercise.id] || !repsSet[p.exercise.id]} 
+                          <button
+                            onClick={() => handleAddSerie(p.exercise.id)}
+                            disabled={!cargas[p.exercise.id] || !repsSet[p.exercise.id]}
                             className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl font-black text-[11px] uppercase tracking-wider disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                           >
                             + SÉRIE
                           </button>
                         </div>
-                        
+
                         {fantasma && (
                           <div className="mt-3 text-center">
                             <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
@@ -541,7 +597,7 @@ export default function App() {
               <h2 className="text-xl font-bold">Configurar Fichas</h2>
               <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-blue-500/30">+ EXERCÍCIO</button>
             </div>
-            
+
             <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
               {['A', 'B', 'C'].map(f => (
                 <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Ficha {f}</button>
@@ -573,9 +629,9 @@ export default function App() {
               <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Total de Carga (kg)</h3>
               <div className="flex-1 min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={volumeHistory.map((v:any) => ({ ...v, d: new Date(v.data).getDate() }))}>
+                  <BarChart data={volumeHistory.map((v: any) => ({ ...v, d: new Date(v.data).getDate() }))}>
                     <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
                     <Bar dataKey="volume" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -583,22 +639,22 @@ export default function App() {
             </div>
 
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-80 flex flex-col">
-               <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
-                 <form onSubmit={handleRegistrarPeso} className="flex gap-2">
-                   <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
-                   <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
-                 </form>
-               </div>
-               <div className="flex-1 min-h-0">
-                 <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={weightHistory.map((w:any) => ({ ...w, d: new Date(w.data).getDate() }))}>
-                      <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                      <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
-                      <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
-                    </LineChart>
-                 </ResponsiveContainer>
-               </div>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
+                <form onSubmit={handleRegistrarPeso} className="flex gap-2">
+                  <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
+                  <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
+                </form>
+              </div>
+              <div className="flex-1 min-h-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }))}>
+                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                    <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg mb-8">
@@ -609,7 +665,7 @@ export default function App() {
                   const iso = d.toISOString().split('T')[0];
                   const treinou = frequency.includes(iso);
                   return (
-                    <button 
+                    <button
                       key={iso}
                       onClick={() => treinou && handleOpenReport(iso)}
                       className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
@@ -626,17 +682,17 @@ export default function App() {
         {/* ABA PERFIL */}
         {activeTab === 'perfil' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
-             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
-                <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4">
-                  <span className="text-2xl font-black text-gray-500">{user.email.substring(0,2).toUpperCase()}</span>
-                </div>
-                <h2 className="text-xl font-bold mb-1">{user.email}</h2>
-                <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
+              <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4">
+                <span className="text-2xl font-black text-gray-500">{user.email.substring(0, 2).toUpperCase()}</span>
+              </div>
+              <h2 className="text-xl font-bold mb-1">{user.email}</h2>
+              <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
 
-                <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
-                  Sair da Conta
-                </button>
-             </div>
+              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
+                Sair da Conta
+              </button>
+            </div>
           </div>
         )}
       </main>
@@ -648,8 +704,8 @@ export default function App() {
             <h3 className="text-xl font-bold mb-4 text-white text-center">Treinos do Dia</h3>
             <div className="space-y-3">
               {daySessions.map((sess, i) => (
-                <button 
-                  key={sess.id} 
+                <button
+                  key={sess.id}
                   onClick={() => {
                     setSelectedReport(sess);
                     setDaySessions(null);
@@ -658,7 +714,7 @@ export default function App() {
                 >
                   <span className="font-bold text-white">Sessão {i + 1}</span>
                   <span className="text-xs text-gray-400 group-hover:text-white transition-colors">
-                    {new Date(sess.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    {new Date(sess.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </button>
               ))}
@@ -743,16 +799,16 @@ export default function App() {
 
       {/* MODAL RELATÓRIO */}
       {selectedReport && (
-        <ReportModal 
-          sessionData={selectedReport} 
-          allExercises={library} 
-          onClose={() => setSelectedReport(null)} 
+        <ReportModal
+          sessionData={selectedReport}
+          allExercises={library}
+          onClose={() => setSelectedReport(null)}
           onShare={shareReport}
           onDelete={async () => {
-             if(confirm("Excluir treino?")) {
-               await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
-               setSelectedReport(null); fetchData();
-             }
+            if (confirm("Excluir treino?")) {
+              await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
+              setSelectedReport(null); fetchData();
+            }
           }}
         />
       )}
