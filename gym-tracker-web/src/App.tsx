@@ -35,7 +35,6 @@ const dispararAlarmeDescanso = () => {
   }
 };
 
-// --- COMPONENTE DO RELATÓRIO PRINTÁVEL ---
 // --- COMPONENTE DO RELATÓRIO PRINTÁVEL (ATUALIZADO) ---
 function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: any) {
   const reportRef = useRef<HTMLDivElement>(null);
@@ -661,13 +660,21 @@ export default function App() {
               <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Frequência Mensal</h3>
               <div className="flex flex-wrap gap-2 justify-center">
                 {Array.from({ length: 30 }).map((_, i) => {
-                  const d = new Date(); d.setDate(d.getDate() - (29 - i));
-                  const iso = d.toISOString().split('T')[0];
-                  const treinou = frequency.includes(iso);
+                  const d = new Date();
+                  d.setDate(d.getDate() - (29 - i));
+
+                  // CORREÇÃO DO FUSO HORÁRIO: Pega o dia, mês e ano exatos da sua região
+                  const year = d.getFullYear();
+                  const month = String(d.getMonth() + 1).padStart(2, '0');
+                  const day = String(d.getDate()).padStart(2, '0');
+                  const dataLocal = `${year}-${month}-${day}`;
+
+                  const treinou = frequency.includes(dataLocal);
+
                   return (
                     <button
-                      key={iso}
-                      onClick={() => treinou && handleOpenReport(iso)}
+                      key={dataLocal}
+                      onClick={() => treinou && handleOpenReport(dataLocal)}
                       className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
                     >
                       {d.getDate()}
