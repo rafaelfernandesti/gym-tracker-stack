@@ -507,7 +507,7 @@ app.delete('/logs/:logId', async (req, res) => {
     const { logId } = req.params;
     try {
         await prisma.workoutLog.delete({
-            where: { id: Number(logId) }
+            where: { id: logId }
         });
         res.json({ message: 'Série removida com sucesso' });
     } catch (error) {
