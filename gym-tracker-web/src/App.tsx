@@ -163,7 +163,7 @@ export default function App() {
   // UX de Treino Ativo 
   const [cargas, setCargas] = useState<Record<number, string>>({});
   const [repsSet, setRepsSet] = useState<Record<number, string>>({});
-  const [currentLogs, setCurrentLogs] = useState<{ exerciseId: number, carga: number, reps: number }[]>([]);
+  const [currentLogs, setCurrentLogs] = useState<{id?: number, exerciseId: number, carga: number, reps: number}[]>([]);
 
   // UI Modais e Login
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -316,7 +316,16 @@ export default function App() {
     });
 
     if (res.ok) {
-      const newLogs = [...currentLogs, { exerciseId: exId, carga: c, reps: r }];
+      const savedLog = await res.json(); // Pega o ID gerado pelo banco
+
+      // Adiciona a série com o ID oficial do banco (ou um temporário por segurança)
+      const newLogs = [...currentLogs, {
+        id: savedLog.id || Date.now(),
+        exerciseId: exId,
+        carga: c,
+        reps: r
+      }];
+
       setCurrentLogs(newLogs);
 
       const updatedSession = { ...activeSession, logs: newLogs };
@@ -327,6 +336,21 @@ export default function App() {
       setRepsSet({ ...repsSet, [exId]: '' });
       setRestTime(60);
     }
+  };
+
+  const handleDeleteSerie = async (logId: number) => {
+    if (!confirm("Excluir esta série?")) return;
+
+    // Apaga da tela na hora para não travar o seu treino
+    const newLogs = currentLogs.filter(l => l.id !== logId);
+    setCurrentLogs(newLogs);
+
+    const updatedSession = { ...activeSession, logs: newLogs };
+    setActiveSession(updatedSession);
+    localStorage.setItem('@GymTracker:activeSession', JSON.stringify(updatedSession));
+
+    // Manda a ordem silenciosa para a API apagar no banco
+    await fetch(`${API_URL}/logs/${logId}`, { method: 'DELETE' });
   };
 
   const handleEndWorkout = async () => {
@@ -561,9 +585,18 @@ export default function App() {
                         {exLogs.length > 0 && (
                           <div className="mb-4 space-y-2">
                             {exLogs.map((log, idx) => (
-                              <div key={idx} className="flex justify-between items-center bg-gray-900/80 p-2 px-4 rounded-lg border border-gray-700/50">
+                              <div key={log.id || idx} className="flex justify-between items-center bg-gray-900/80 p-2 px-4 rounded-lg border border-gray-700/50 group">
                                 <span className="text-[10px] text-gray-500 font-bold uppercase">Série {idx + 1}</span>
-                                <span className="text-sm font-black text-white">{log.carga} <span className="text-gray-500 font-normal text-xs">kg ×</span> {log.reps} <span className="text-gray-500 font-normal text-xs">reps</span></span>
+                                <div className="flex items-center gap-4">
+                                  <span className="text-sm font-black text-white">{log.carga} <span className="text-gray-500 font-normal text-xs">kg ×</span> {log.reps} <span className="text-gray-500 font-normal text-xs">reps</span></span>
+                                  {/* NOVO BOTÃO DE EXCLUIR */}
+                                  <button 
+                                    onClick={() => handleDeleteSerie(log.id)} 
+                                    className="text-red-500 hover:text-red-400 font-bold p-1 text-xs opacity-70 hover:opacity-100 transition-opacity"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>
