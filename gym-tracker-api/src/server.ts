@@ -161,6 +161,21 @@ app.get('/plans/:userId', async (req, res) => {
     }
 });
 
+// Remover Exercício da Ficha
+app.delete('/plans/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // O Number(id) é crucial aqui, senão o banco recusa a exclusão
+    await prisma.workoutPlan.delete({
+      where: { id: Number(id) }
+    });
+    res.json({ message: 'Exercício removido da ficha com sucesso.' });
+  } catch (error) {
+    console.error("Erro ao deletar da ficha:", error);
+    res.status(500).json({ error: 'Erro ao remover exercício da ficha.' });
+  }
+});
+
 // 2. Adicionar Exercício à Ficha (Corrigido: removido campos inexistentes)
 app.post('/plans', async (req, res) => {
     const { userId, exerciseId, ficha } = req.body;
