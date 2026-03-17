@@ -365,22 +365,30 @@ app.get('/logs/frequency/:userId', async (req, res) => {
 
 // === ROTAS DE SESSÃO DE TREINO (RELATÓRIO) ===
 
-// 1. Iniciar um novo treino (Cria a sessão)
+// Iniciar Treino (agora com Retomada Automática)
 app.post('/sessions/start', async (req, res) => {
     const { userId } = req.body;
     try {
-        // Verifica se já não tem um treino rodando (endTime nulo)
-        const activeSession = await prisma.workoutSession.findFirst({
-            where: { userId, endTime: null }
+        // 1. Procura se já existe um treino "preso" (sem horário de fim)
+        const openSession = await prisma.workoutSession.findFirst({
+            where: { userId, endTime: null },
+            include: { logs: true } // Já puxa as séries que você tinha feito
         });
-        if (activeSession) return res.status(400).json({ error: 'Você já tem um treino em andamento.' });
 
-        const session = await prisma.workoutSession.create({
+        // 2. Se encontrar, ele não dá erro! Ele DEVOLVE o treino pra você continuar.
+        if (openSession) {
+            return res.json(openSession);
+        }
+
+        // 3. Se não encontrar nada aberto, aí sim cria um novinho em folha.
+        const newSession = await prisma.workoutSession.create({
             data: { userId }
         });
-        res.status(201).json(session);
+        res.json(newSession);
+
     } catch (error) {
-        res.status(500).json({ error: 'Erro ao iniciar treino.' });
+        console.error(error);
+        res.status(400).json({ error: 'Erro ao iniciar sessão.' });
     }
 });
 
