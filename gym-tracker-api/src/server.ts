@@ -342,19 +342,21 @@ app.delete('/weight/:id', async (req, res) => {
     }
 });
 
-// ROTA: Buscar frequência de treinos (dias activos)
+// Buscar Frequência (Ignora treinos vazios ou abandonados)
 app.get('/logs/frequency/:userId', async (req, res) => {
+    const { userId } = req.params;
     try {
-        const logs = await prisma.workoutLog.findMany({
-            where: { userId: req.params.userId },
-            select: { data: true },
-            orderBy: { data: 'asc' }
+        const sessions = await prisma.workoutSession.findMany({
+            where: {
+                userId,
+                endTime: { not: null }, // O treino tem de ter sido finalizado
+                logs: { some: {} }      // Tem de ter pelo menos 1 série registada
+            },
+            select: { startTime: true }
         });
 
-        // Extrai apenas as datas únicas no formato YYYY-MM-DD
-        const diasActivos = [...new Set(logs.map(log => log.data.toISOString().split('T')[0]))];
-
-        res.json(diasActivos);
+        // Devolve as datas exatas
+        res.json(sessions.map(s => s.startTime.toISOString()));
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Erro ao buscar frequência.' });
