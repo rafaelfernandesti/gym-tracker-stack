@@ -163,7 +163,7 @@ export default function App() {
   // UX de Treino Ativo 
   const [cargas, setCargas] = useState<Record<number, string>>({});
   const [repsSet, setRepsSet] = useState<Record<number, string>>({});
-  const [currentLogs, setCurrentLogs] = useState<{id?: number, exerciseId: number, carga: number, reps: number}[]>([]);
+  const [currentLogs, setCurrentLogs] = useState<{ id?: number, exerciseId: number, carga: number, reps: number }[]>([]);
 
   // UI Modais e Login
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -590,8 +590,8 @@ export default function App() {
                                 <div className="flex items-center gap-4">
                                   <span className="text-sm font-black text-white">{log.carga} <span className="text-gray-500 font-normal text-xs">kg ×</span> {log.reps} <span className="text-gray-500 font-normal text-xs">reps</span></span>
                                   {/* NOVO BOTÃO DE EXCLUIR */}
-                                  <button 
-                                    onClick={() => handleDeleteSerie(log.id)} 
+                                  <button
+                                    onClick={() => log.id && handleDeleteSerie(log.id)}
                                     className="text-red-500 hover:text-red-400 font-bold p-1 text-xs opacity-70 hover:opacity-100 transition-opacity"
                                   >
                                     ✕
