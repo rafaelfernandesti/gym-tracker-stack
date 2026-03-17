@@ -2,27 +2,34 @@ import { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { toBlob } from 'html-to-image';
 
-const API_URL = "https://gym-tracker-api-yomc.onrender.com"; 
+const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
-// --- FUNÇÃO DE ALARME DO DESCANSO ---
+// --- FUNÇÃO DE ALARME DO DESCANSO (NATIVA) ---
 const dispararAlarmeDescanso = () => {
-  if ('vibrate' in navigator) navigator.vibrate([300, 150, 300, 150, 500]);
+  if ('vibrate' in navigator) {
+    navigator.vibrate([300, 150, 300, 150, 500]);
+  }
   try {
     const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
     if (AudioContext) {
       const ctx = new AudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'triangle'; 
-      osc.frequency.setValueAtTime(800, ctx.currentTime); 
-      gain.gain.setValueAtTime(0.5, ctx.currentTime); 
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5); 
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+
+      gain.gain.setValueAtTime(0.5, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
+
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 1.5);
     }
-  } catch (e) { console.log("Áudio não suportado"); }
+  } catch (e) {
+    console.log("Áudio não suportado ou bloqueado.");
+  }
 };
 
 // --- COMPONENTE DO RELATÓRIO PRINTÁVEL ---
@@ -33,11 +40,13 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
   const startTime = new Date(sessionData.startTime);
   const endTime = new Date(sessionData.endTime);
   const durationMin = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
-  
-  const dataFormatada = startTime.toLocaleDateString('pt-BR', { 
-    day: '2-digit', month: 'long', year: 'numeric' 
+
+  const dataFormatada = startTime.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
   });
-  
+
   const exercisesMap: any = {};
   const musculosTrabalhados = new Set<string>();
 
@@ -45,10 +54,15 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
     const exerciseData = log.exercise || allExercises.find((ex: any) => ex.id === log.exerciseId);
     const exNome = exerciseData?.nome || 'Exercício';
     const grupo = exerciseData?.grupoMuscular;
-    
-    if (!exercisesMap[exNome]) exercisesMap[exNome] = { series: 0, maxCarga: 0, grupo };
+
+    if (!exercisesMap[exNome]) {
+      exercisesMap[exNome] = { series: 0, maxCarga: 0, grupo };
+    }
     exercisesMap[exNome].series += 1;
-    if (log.carga > exercisesMap[exNome].maxCarga) exercisesMap[exNome].maxCarga = log.carga;
+    if (log.carga > exercisesMap[exNome].maxCarga) {
+      exercisesMap[exNome].maxCarga = log.carga;
+    }
+
     if (grupo) musculosTrabalhados.add(grupo);
   });
 
@@ -59,7 +73,9 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in overflow-y-auto">
       <div ref={reportRef} id="report-card" className="w-full max-w-sm bg-gray-900 p-8 rounded-[2rem] border border-gray-700 shadow-2xl text-white relative overflow-hidden">
+
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-blue-600/20 to-transparent"></div>
+
         <header className="text-center mb-6 relative z-10">
           <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
           <p className="text-xs text-gray-400 uppercase font-bold mt-2 tracking-widest">Resumo de Conquista</p>
@@ -81,7 +97,9 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
           <p className="text-[10px] text-gray-500 uppercase font-bold mb-3 tracking-widest">Músculos Focados</p>
           <div className="flex flex-wrap justify-center gap-2">
             {Array.from(musculosTrabalhados).map(m => (
-              <span key={m} className="bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-full text-xs font-black border border-blue-500/30 uppercase tracking-wider">{m}</span>
+              <span key={m} className="bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-full text-xs font-black border border-blue-500/30 uppercase tracking-wider">
+                {m}
+              </span>
             ))}
           </div>
         </div>
@@ -95,29 +113,32 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
                   <span className="text-blue-500 font-black text-lg w-4">{idx + 1}º</span>
                   <div>
                     <span className="font-bold text-sm block text-white">{nome}</span>
-                    <span className="text-[10px] text-gray-400">{dados.series} séries completas</span>
+                    <span className="text-[10px] text-gray-400">{dados.series} séries</span>
                   </div>
                 </div>
                 <div className="text-right">
                   <span className="block text-sm font-black text-white">{dados.maxCarga}kg</span>
-                  <span className="text-[9px] text-gray-500 uppercase font-bold">Carga Máx</span>
+                  <span className="text-[9px] text-gray-500 uppercase font-bold">Máx</span>
                 </div>
               </div>
             ))}
           </div>
+
           {outrosCount > 0 && (
             <div className="mt-4 text-center">
-              <span className="text-[10px] text-gray-500 font-bold bg-gray-900 px-4 py-1.5 rounded-full border border-gray-800 uppercase tracking-wider">+ {outrosCount} outros exercícios</span>
+              <span className="text-[10px] text-gray-500 font-bold bg-gray-900 px-4 py-1.5 rounded-full border border-gray-800 uppercase tracking-wider">
+                + {outrosCount} outros exercícios
+              </span>
             </div>
           )}
         </div>
       </div>
-      
+
       <div className="flex gap-3 mt-6 w-full max-w-sm">
         <button onClick={onClose} className="flex-1 bg-gray-800 border border-gray-700 py-4 rounded-2xl font-bold text-gray-300 hover:text-white transition-colors">FECHAR</button>
         <button onClick={onShare} className="flex-1 bg-blue-600 shadow-lg shadow-blue-600/30 py-4 rounded-2xl font-black tracking-wider hover:bg-blue-500 transition-colors">COMPARTILHAR</button>
       </div>
-      <button onClick={onDelete} className="mt-6 text-red-500/70 text-xs font-bold uppercase hover:text-red-400 transition-colors underline underline-offset-4">Excluir Registo</button>
+      <button onClick={onDelete} className="mt-6 text-red-500/70 text-xs font-bold uppercase hover:text-red-400 transition-colors underline underline-offset-4">Excluir Registro</button>
     </div>
   );
 }
@@ -128,6 +149,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'treinar' | 'fichas' | 'evolucao' | 'perfil'>('treinar');
   const [fichaAtiva, setFichaAtiva] = useState('A');
 
+  // Dados Globais
   const [library, setLibrary] = useState<any[]>([]);
   const [myPlans, setMyPlans] = useState<any[]>([]);
   const [activeSession, setActiveSession] = useState<any>(null);
@@ -136,66 +158,40 @@ export default function App() {
   const [weightHistory, setWeightHistory] = useState<any[]>([]);
   const [frequency, setFrequency] = useState<string[]>([]);
   const [volumeHistory, setVolumeHistory] = useState<any[]>([]);
-  const [lastLogs, setLastLogs] = useState<any[]>([]); 
+  const [lastLogs, setLastLogs] = useState<any[]>([]);
 
+  // UX de Treino Ativo 
   const [cargas, setCargas] = useState<Record<number, string>>({});
   const [repsSet, setRepsSet] = useState<Record<number, string>>({});
-  const [currentLogs, setCurrentLogs] = useState<{id?: number, exerciseId: number, carga: number, reps: number}[]>([]);
+  const [currentLogs, setCurrentLogs] = useState<{ exerciseId: number, carga: number, reps: number }[]>([]);
 
+  // UI Modais e Login
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [libTab, setLibTab] = useState<'global' | 'custom'>('global');
   const [isLogin, setIsLogin] = useState(true);
-  
+
+  // Formulários
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [novoExNome, setNovoExNome] = useState('');
   const [novoExGrupo, setNovoExGrupo] = useState('Peito');
   const [novoPeso, setNovoPeso] = useState('');
 
+  // Cronômetros
   const [elapsedTime, setElapsedTime] = useState('00:00');
   const [restTime, setRestTime] = useState(0);
-
-  // --- WAKE LOCK API (TELA SEMPRE ATIVA) ---
-  const wakeLock = useRef<any>(null);
-
-  const requestWakeLock = async () => {
-    try {
-      if ('wakeLock' in navigator) {
-        wakeLock.current = await navigator.wakeLock.request('screen');
-      }
-    } catch (err) { console.error('Wake Lock falhou:', err); }
-  };
-
-  const releaseWakeLock = async () => {
-    if (wakeLock.current !== null) {
-      await wakeLock.current.release();
-      wakeLock.current = null;
-    }
-  };
-
-  // Restaura a trava de tela se você minimizar e voltar pro app
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && activeSession) {
-        requestWakeLock();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [activeSession]);
 
   useEffect(() => {
     const saved = localStorage.getItem('@GymTracker:user');
     if (saved) setUser(JSON.parse(saved));
-    
+
     const sessao = localStorage.getItem('@GymTracker:activeSession');
     if (sessao) {
       const parsedSession = JSON.parse(sessao);
       setActiveSession(parsedSession);
       if (parsedSession.logs) {
-        setCurrentLogs(parsedSession.logs.map((l:any) => ({ id: l.id, exerciseId: l.exerciseId, carga: l.carga, reps: l.repsFeitas || l.reps })));
+        setCurrentLogs(parsedSession.logs.map((l: any) => ({ exerciseId: l.exerciseId, carga: l.carga, reps: l.repsFeitas || l.reps })));
       }
-      requestWakeLock(); // Religa a tela ao restaurar a sessão
     }
   }, []);
 
@@ -203,6 +199,7 @@ export default function App() {
     if (user) fetchData();
   }, [user]);
 
+  // Cronômetro Geral
   useEffect(() => {
     let interval: any;
     if (activeSession) {
@@ -220,6 +217,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [activeSession]);
 
+  // Cronômetro de Descanso
   useEffect(() => {
     if (restTime > 0) {
       const timerId = setTimeout(() => {
@@ -238,7 +236,7 @@ export default function App() {
         fetch(`${API_URL}/weight/${user.id}`),
         fetch(`${API_URL}/logs/frequency/${user.id}`),
         fetch(`${API_URL}/volume/${user.id}`),
-        fetch(`${API_URL}/logs/last/${user.id}`) 
+        fetch(`${API_URL}/logs/last/${user.id}`)
       ]);
       if (libRes.ok) setLibrary(await libRes.json());
       if (planRes.ok) setMyPlans(await planRes.json());
@@ -272,13 +270,12 @@ export default function App() {
     });
     if (res.ok) {
       const data = await res.json();
-      data.logs = []; 
+      if (!data.logs) data.logs = [];
       setActiveSession(data);
-      setCurrentLogs([]);
+      setCurrentLogs(data.logs.map((l: any) => ({ exerciseId: l.exerciseId, carga: l.carga, reps: l.repsFeitas || l.reps })));
       localStorage.setItem('@GymTracker:activeSession', JSON.stringify(data));
-      
-      requestWakeLock(); // Trava a tela para não apagar
-      try { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); ctx.resume(); } catch(e){}
+
+      try { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); ctx.resume(); } catch (e) { }
     }
   };
 
@@ -300,34 +297,16 @@ export default function App() {
     });
 
     if (res.ok) {
-      const logSalvo = await res.json(); // Pega a resposta do BD para saber o ID exato
-      
-      // Salva o log com o ID real para podermos apagar depois
-      const newLogs = [...currentLogs, { id: logSalvo.id, exerciseId: exId, carga: c, reps: r }];
+      const newLogs = [...currentLogs, { exerciseId: exId, carga: c, reps: r }];
       setCurrentLogs(newLogs);
-      
+
       const updatedSession = { ...activeSession, logs: newLogs };
       setActiveSession(updatedSession);
       localStorage.setItem('@GymTracker:activeSession', JSON.stringify(updatedSession));
 
       setCargas({ ...cargas, [exId]: '' });
       setRepsSet({ ...repsSet, [exId]: '' });
-      setRestTime(60); 
-    }
-  };
-
-  // --- NOVA FUNÇÃO DE EXCLUIR SÉRIE ERRADA ---
-  const handleDeleteLog = async (logId: number) => {
-    if (!confirm("Excluir esta série do treino atual?")) return;
-    
-    const res = await fetch(`${API_URL}/logs/${logId}`, { method: 'DELETE' });
-    if (res.ok) {
-      const newLogs = currentLogs.filter(l => l.id !== logId);
-      setCurrentLogs(newLogs);
-      
-      const updatedSession = { ...activeSession, logs: newLogs };
-      setActiveSession(updatedSession);
-      localStorage.setItem('@GymTracker:activeSession', JSON.stringify(updatedSession));
+      setRestTime(60);
     }
   };
 
@@ -341,18 +320,34 @@ export default function App() {
     if (res.ok) {
       const sessionFinalizada = await res.json();
       sessionFinalizada.logs = currentLogs;
-      
+
       setActiveSession(null);
       setCurrentLogs([]);
       setRestTime(0);
       localStorage.removeItem('@GymTracker:activeSession');
-      
-      releaseWakeLock(); // Libera a tela para apagar normalmente
-      fetchData(); 
-      setSelectedReport(sessionFinalizada); 
+
+      fetchData();
+      setSelectedReport(sessionFinalizada);
     }
   };
 
+  // --- NOVA FUNÇÃO: CANCELAR TREINO ---
+  const handleCancelWorkout = async () => {
+    if (!confirm("Tem certeza que deseja cancelar? Nenhuma série será salva.")) return;
+
+    // Deleta a sessão diretamente do banco de dados
+    const res = await fetch(`${API_URL}/sessions/${activeSession.id}`, { method: 'DELETE' });
+
+    if (res.ok) {
+      setActiveSession(null);
+      setCurrentLogs([]);
+      setRestTime(0);
+      localStorage.removeItem('@GymTracker:activeSession');
+      fetchData(); // Recarrega gráficos limpos
+    }
+  };
+
+  // --- ROTINAS DE API ---
   const handleAddToPlan = async (exId: number, ficha: string) => {
     const res = await fetch(`${API_URL}/plans`, {
       method: 'POST',
@@ -412,9 +407,9 @@ export default function App() {
     if (res.ok) {
       const reports = await res.json();
       if (reports.length === 1) {
-        setSelectedReport(reports[0]); 
+        setSelectedReport(reports[0]);
       } else if (reports.length > 1) {
-        setDaySessions(reports); 
+        setDaySessions(reports);
       }
     }
   };
@@ -432,6 +427,7 @@ export default function App() {
     }
   };
 
+  // --- TELA DE LOGIN ---
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col justify-center p-4 text-white">
@@ -441,7 +437,7 @@ export default function App() {
             <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
             <p className="text-gray-400 text-sm mt-2">O seu treino, no seu controle.</p>
           </div>
-          
+
           <form onSubmit={handleAuth} className="space-y-4">
             <input type="email" placeholder="E-mail" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={email} onChange={e => setEmail(e.target.value)} />
             <input type="password" placeholder="Senha" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={senha} onChange={e => setSenha(e.target.value)} />
@@ -469,15 +465,15 @@ export default function App() {
       </header>
 
       <main className="max-w-md mx-auto px-4 mt-6">
-        
+
         {/* ABA TREINAR */}
         {activeTab === 'treinar' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
-            
+
             {!activeSession ? (
               <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
                 <h2 className="text-xl font-black mb-4 text-center">Qual o alvo de hoje?</h2>
-                
+
                 <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
                   {['A', 'B', 'C'].map(f => (
                     <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Ficha {f}</button>
@@ -498,7 +494,7 @@ export default function App() {
                   )}
                 </div>
 
-                <button 
+                <button
                   onClick={handleStartWorkout}
                   disabled={exerciciosAtuais.length === 0}
                   className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-xl font-black uppercase tracking-widest disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-lg shadow-blue-500/30"
@@ -518,7 +514,7 @@ export default function App() {
                     </div>
                     <div className="text-2xl font-black font-mono text-white tracking-widest">{elapsedTime}</div>
                   </div>
-                  
+
                   {restTime > 0 && (
                     <div className="mt-3 bg-blue-900/40 p-2 rounded-xl border border-blue-500/30 flex justify-between items-center animate-pulse">
                       <span className="text-blue-400 text-[10px] font-bold uppercase tracking-widest pl-2">Descanso</span>
@@ -531,11 +527,11 @@ export default function App() {
                 <div className="space-y-4">
                   {exerciciosAtuais.map(p => {
                     const exLogs = currentLogs.filter(l => l.exerciseId === p.exercise.id);
-                    const fantasma = lastLogs.find(l => l.exerciseId === p.exercise.id); 
-                    
+                    const fantasma = lastLogs.find(l => l.exerciseId === p.exercise.id);
+
                     return (
                       <div key={p.id} className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-lg relative overflow-hidden">
-                        
+
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h3 className="font-black text-lg text-white leading-tight">{p.exercise.nome}</h3>
@@ -546,47 +542,38 @@ export default function App() {
                         {exLogs.length > 0 && (
                           <div className="mb-4 space-y-2">
                             {exLogs.map((log, idx) => (
-                              <div key={log.id || idx} className="flex justify-between items-center bg-gray-900/80 p-2 px-4 rounded-lg border border-gray-700/50">
+                              <div key={idx} className="flex justify-between items-center bg-gray-900/80 p-2 px-4 rounded-lg border border-gray-700/50">
                                 <span className="text-[10px] text-gray-500 font-bold uppercase">Série {idx + 1}</span>
-                                <div className="flex items-center gap-3">
-                                  <span className="text-sm font-black text-white">{log.carga} <span className="text-gray-500 font-normal text-xs">kg ×</span> {log.reps} <span className="text-gray-500 font-normal text-xs">reps</span></span>
-                                  
-                                  {/* BOTÃO DE LIXEIRA AQUI */}
-                                  {log.id && (
-                                    <button onClick={() => handleDeleteLog(log.id!)} className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-md transition-colors">
-                                      ✕
-                                    </button>
-                                  )}
-                                </div>
+                                <span className="text-sm font-black text-white">{log.carga} <span className="text-gray-500 font-normal text-xs">kg ×</span> {log.reps} <span className="text-gray-500 font-normal text-xs">reps</span></span>
                               </div>
                             ))}
                           </div>
                         )}
 
                         <div className="flex gap-2 bg-gray-900 p-2 rounded-2xl border border-gray-700">
-                          <input 
-                            type="number" 
-                            placeholder="kg" 
-                            value={cargas[p.exercise.id] || ''} 
-                            onChange={e => setCargas({...cargas, [p.exercise.id]: e.target.value})} 
-                            className="w-16 bg-gray-800 p-3 rounded-xl border border-gray-700 outline-none text-center font-bold text-sm" 
+                          <input
+                            type="number"
+                            placeholder="kg"
+                            value={cargas[p.exercise.id] || ''}
+                            onChange={e => setCargas({ ...cargas, [p.exercise.id]: e.target.value })}
+                            className="w-16 bg-gray-800 p-3 rounded-xl border border-gray-700 outline-none text-center font-bold text-sm"
                           />
-                          <input 
-                            type="number" 
-                            placeholder="reps" 
-                            value={repsSet[p.exercise.id] || ''} 
-                            onChange={e => setRepsSet({...repsSet, [p.exercise.id]: e.target.value})} 
-                            className="w-16 bg-gray-800 p-3 rounded-xl border border-gray-700 outline-none text-center font-bold text-sm" 
+                          <input
+                            type="number"
+                            placeholder="reps"
+                            value={repsSet[p.exercise.id] || ''}
+                            onChange={e => setRepsSet({ ...repsSet, [p.exercise.id]: e.target.value })}
+                            className="w-16 bg-gray-800 p-3 rounded-xl border border-gray-700 outline-none text-center font-bold text-sm"
                           />
-                          <button 
-                            onClick={() => handleAddSerie(p.exercise.id)} 
-                            disabled={!cargas[p.exercise.id] || !repsSet[p.exercise.id]} 
+                          <button
+                            onClick={() => handleAddSerie(p.exercise.id)}
+                            disabled={!cargas[p.exercise.id] || !repsSet[p.exercise.id]}
                             className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl font-black text-[11px] uppercase tracking-wider disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                           >
                             + SÉRIE
                           </button>
                         </div>
-                        
+
                         {fantasma && (
                           <div className="mt-3 text-center">
                             <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
@@ -600,9 +587,15 @@ export default function App() {
                   })}
                 </div>
 
-                <button onClick={handleEndWorkout} className="w-full bg-red-600 hover:bg-red-700 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-red-500/20 transition-all mt-8">
-                  FINALIZAR TREINO
-                </button>
+                {/* BOTÕES DE AÇÃO DO TREINO */}
+                <div className="mt-8 space-y-3">
+                  <button onClick={handleEndWorkout} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-green-500/20 transition-all">
+                    FINALIZAR TREINO
+                  </button>
+                  <button onClick={handleCancelWorkout} className="w-full py-4 rounded-2xl font-bold text-red-500/80 uppercase tracking-widest hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/30 text-xs">
+                    Cancelar Treino
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -615,7 +608,7 @@ export default function App() {
               <h2 className="text-xl font-bold">Configurar Fichas</h2>
               <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-blue-500/30">+ EXERCÍCIO</button>
             </div>
-            
+
             <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
               {['A', 'B', 'C'].map(f => (
                 <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Ficha {f}</button>
@@ -647,9 +640,9 @@ export default function App() {
               <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Total de Carga (kg)</h3>
               <div className="flex-1 min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={volumeHistory.map((v:any) => ({ ...v, d: new Date(v.data).getDate() }))}>
+                  <BarChart data={volumeHistory.map((v: any) => ({ ...v, d: new Date(v.data).getDate() }))}>
                     <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
                     <Bar dataKey="volume" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -657,46 +650,44 @@ export default function App() {
             </div>
 
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-80 flex flex-col">
-               <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
-                 <form onSubmit={handleRegistrarPeso} className="flex gap-2">
-                   <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
-                   <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
-                 </form>
-               </div>
-               <div className="flex-1 min-h-0">
-                 <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={weightHistory.map((w:any) => ({ ...w, d: new Date(w.data).getDate() }))}>
-                      <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                      <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
-                      <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
-                    </LineChart>
-                 </ResponsiveContainer>
-               </div>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
+                <form onSubmit={handleRegistrarPeso} className="flex gap-2">
+                  <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
+                  <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
+                </form>
+              </div>
+              <div className="flex-1 min-h-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }))}>
+                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                    <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg mb-8">
               <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Frequência Mensal</h3>
               <div className="flex flex-wrap gap-2 justify-center">
                 {Array.from({ length: 30 }).map((_, i) => {
-                  // 1. Pega o dia exato no seu fuso horário (Brasil)
-                  const d = new Date(); 
+                  const d = new Date();
                   d.setDate(d.getDate() - (29 - i));
                   const ano = d.getFullYear();
                   const mes = d.getMonth();
                   const dia = d.getDate();
                   const iso = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-                  
-                  // 2. Compara com os treinos convertendo tudo para a sua hora local
+
                   const treinou = frequency.some((isoDateString: string) => {
                     const dataTreino = new Date(isoDateString);
-                    return dataTreino.getFullYear() === ano && 
-                           dataTreino.getMonth() === mes && 
-                           dataTreino.getDate() === dia;
+                    return dataTreino.getFullYear() === ano &&
+                      dataTreino.getMonth() === mes &&
+                      dataTreino.getDate() === dia;
                   });
 
                   return (
-                    <button 
+                    <button
                       key={iso}
                       onClick={() => treinou && handleOpenReport(iso)}
                       className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
@@ -713,17 +704,17 @@ export default function App() {
         {/* ABA PERFIL */}
         {activeTab === 'perfil' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
-             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
-                <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4">
-                  <span className="text-2xl font-black text-gray-500">{user.email.substring(0,2).toUpperCase()}</span>
-                </div>
-                <h2 className="text-xl font-bold mb-1">{user.email}</h2>
-                <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
+              <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4">
+                <span className="text-2xl font-black text-gray-500">{user.email.substring(0, 2).toUpperCase()}</span>
+              </div>
+              <h2 className="text-xl font-bold mb-1">{user.email}</h2>
+              <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
 
-                <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
-                  Sair da Conta
-                </button>
-             </div>
+              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
+                Sair da Conta
+              </button>
+            </div>
           </div>
         )}
       </main>
@@ -735,8 +726,8 @@ export default function App() {
             <h3 className="text-xl font-bold mb-4 text-white text-center">Treinos do Dia</h3>
             <div className="space-y-3">
               {daySessions.map((sess, i) => (
-                <button 
-                  key={sess.id} 
+                <button
+                  key={sess.id}
                   onClick={() => {
                     setSelectedReport(sess);
                     setDaySessions(null);
@@ -745,7 +736,7 @@ export default function App() {
                 >
                   <span className="font-bold text-white">Sessão {i + 1}</span>
                   <span className="text-xs text-gray-400 group-hover:text-white transition-colors">
-                    {new Date(sess.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    {new Date(sess.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </button>
               ))}
@@ -830,16 +821,16 @@ export default function App() {
 
       {/* MODAL RELATÓRIO */}
       {selectedReport && (
-        <ReportModal 
-          sessionData={selectedReport} 
-          allExercises={library} 
-          onClose={() => setSelectedReport(null)} 
+        <ReportModal
+          sessionData={selectedReport}
+          allExercises={library}
+          onClose={() => setSelectedReport(null)}
           onShare={shareReport}
           onDelete={async () => {
-             if(confirm("Excluir treino?")) {
-               await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
-               setSelectedReport(null); fetchData();
-             }
+            if (confirm("Excluir treino?")) {
+              await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
+              setSelectedReport(null); fetchData();
+            }
           }}
         />
       )}
