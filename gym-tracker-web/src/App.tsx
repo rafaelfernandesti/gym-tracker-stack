@@ -679,19 +679,29 @@ export default function App() {
               <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Frequência Mensal</h3>
               <div className="flex flex-wrap gap-2 justify-center">
                 {Array.from({ length: 30 }).map((_, i) => {
-                  const d = new Date(); d.setDate(d.getDate() - (29 - i));
-                  const year = d.getFullYear();
-                  const month = String(d.getMonth() + 1).padStart(2, '0');
-                  const day = String(d.getDate()).padStart(2, '0');
-                  const dataLocal = `${year}-${month}-${day}`;
-                  const treinou = frequency.includes(dataLocal);
+                  // 1. Pega o dia exato no seu fuso horário (Brasil)
+                  const d = new Date(); 
+                  d.setDate(d.getDate() - (29 - i));
+                  const ano = d.getFullYear();
+                  const mes = d.getMonth();
+                  const dia = d.getDate();
+                  const iso = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+                  
+                  // 2. Compara com os treinos convertendo tudo para a sua hora local
+                  const treinou = frequency.some((isoDateString: string) => {
+                    const dataTreino = new Date(isoDateString);
+                    return dataTreino.getFullYear() === ano && 
+                           dataTreino.getMonth() === mes && 
+                           dataTreino.getDate() === dia;
+                  });
+
                   return (
                     <button 
-                      key={dataLocal}
-                      onClick={() => treinou && handleOpenReport(dataLocal)}
+                      key={iso}
+                      onClick={() => treinou && handleOpenReport(iso)}
                       className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
                     >
-                      {d.getDate()}
+                      {dia}
                     </button>
                   );
                 })}
