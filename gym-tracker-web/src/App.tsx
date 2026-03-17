@@ -173,6 +173,7 @@ export default function App() {
   // Formulários
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [novaSenha, setNovaSenha] = useState('');
   const [novoExNome, setNovoExNome] = useState('');
   const [novoExGrupo, setNovoExGrupo] = useState('Peito');
   const [novoPeso, setNovoPeso] = useState('');
@@ -260,6 +261,24 @@ export default function App() {
       setUser(data);
       localStorage.setItem('@GymTracker:user', JSON.stringify(data));
     } else alert(data.error);
+  };
+
+  const handleMudarSenha = async (e: any) => {
+    e.preventDefault();
+    if (!novaSenha) return;
+
+    const res = await fetch(`${API_URL}/users/${user.id}/password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ novaSenha })
+    });
+
+    if (res.ok) {
+      alert("Senha atualizada com sucesso!");
+      setNovaSenha('');
+    } else {
+      alert("Erro ao tentar atualizar a senha.");
+    }
   };
 
   const handleStartWorkout = async () => {
@@ -710,6 +729,24 @@ export default function App() {
               </div>
               <h2 className="text-xl font-bold mb-1">{user.email}</h2>
               <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
+
+              {/* FORMULÁRIO DE TROCA DE SENHA */}
+              <form onSubmit={handleMudarSenha} className="mb-8 space-y-3 bg-gray-900 p-4 rounded-2xl border border-gray-700 text-left">
+                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-2">Segurança</p>
+                <input
+                  type="password"
+                  placeholder="Digitar nova senha"
+                  className="w-full bg-gray-800 p-4 rounded-xl border border-gray-700 outline-none text-sm focus:border-blue-500 transition-colors"
+                  value={novaSenha}
+                  onChange={e => setNovaSenha(e.target.value)}
+                />
+                <button
+                  disabled={!novaSenha}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-blue-500/20"
+                >
+                  Atualizar Senha
+                </button>
+              </form>
 
               <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
                 Sair da Conta
