@@ -332,8 +332,8 @@ export default function App() {
       setActiveSession(updatedSession);
       localStorage.setItem('@GymTracker:activeSession', JSON.stringify(updatedSession));
 
-      setCargas({ ...cargas, [exId]: '' });
-      setRepsSet({ ...repsSet, [exId]: '' });
+      //setCargas({ ...cargas, [exId]: '' });
+      //setRepsSet({ ...repsSet, [exId]: '' });
       setRestTime(60);
     }
   };
