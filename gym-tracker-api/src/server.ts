@@ -307,6 +307,20 @@ app.put('/users/:id/password', async (req, res) => {
         res.status(500).json({ error: 'Erro ao atualizar a senha.' });
     }
 });
+
+// Excluir Série Específica (Correção durante o treino)
+app.delete('/logs/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await prisma.workoutLog.delete({
+            where: { id: id }
+        });
+        res.json({ message: 'Série excluída com sucesso.' });
+    } catch (error) {
+        console.error("Erro ao excluir série:", error);
+        res.status(500).json({ error: 'Erro ao excluir série.' });
+    }
+});
 // Rota para excluir um exercício e todo o seu histórico
 app.delete('/exercises/:id', async (req, res) => {
     const { id } = req.params;
