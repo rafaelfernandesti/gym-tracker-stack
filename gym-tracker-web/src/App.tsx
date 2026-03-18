@@ -409,6 +409,19 @@ export default function App() {
     fetchData();
   };
 
+  const handleUpdateSeries = async (id: number, seriesAlvo: number) => {
+    try {
+      const res = await fetch(`${API_URL}/plans/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seriesAlvo })
+      });
+      if (res.ok) fetchData(); // Atualiza a tela automaticamente
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleCreateCustomExercise = async (e: any) => {
     e.preventDefault();
     if (!novoExNome) return;
@@ -525,9 +538,27 @@ export default function App() {
 
                 <div className="space-y-2 mb-6 max-h-60 overflow-y-auto pr-2 scrollbar-hide">
                   {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
-                    <div key={p.id} className="bg-gray-900 p-3 rounded-xl border border-gray-800 flex justify-between items-center">
-                      <span className="font-bold text-sm">{p.exercise.nome}</span>
-                      <span className="text-[10px] text-blue-500 font-bold uppercase">{p.exercise.grupoMuscular}</span>
+                    <div key={p.id} className="bg-gray-800 p-4 rounded-2xl border border-gray-700 flex justify-between items-center shadow-sm">
+                      <div>
+                        <p className="font-bold text-white">{p.exercise.nome}</p>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{p.exercise.grupoMuscular}</p>
+                      </div>
+
+                      {/* NOVA ÁREA DE CONTROLOS */}
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] text-gray-500 uppercase font-bold mb-1">Séries</span>
+                          <input
+                            type="number"
+                            min="1"
+                            className="w-12 bg-gray-900 text-center text-sm font-bold py-1 rounded-lg border border-gray-700 outline-none text-white focus:border-blue-500 transition-colors"
+                            value={p.seriesAlvo || 3}
+                            onChange={(e) => handleUpdateSeries(p.id, Number(e.target.value))}
+                          />
+                        </div>
+                        <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors">✕</button>
+                      </div>
+
                     </div>
                   )) : (
                     <div className="text-center py-6 border border-dashed border-gray-700 rounded-xl">
@@ -579,6 +610,16 @@ export default function App() {
                           <div>
                             <h3 className="font-black text-lg text-white leading-tight">{p.exercise.nome}</h3>
                             <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">{p.exercise.grupoMuscular}</p>
+                          </div>
+
+                          {/* MOSTRADOR DE META DA FICA */}
+                          <div className="bg-gray-900 px-3 py-1.5 rounded-xl border border-gray-700 flex flex-col items-center shadow-inner">
+                            <span className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">Meta</span>
+                            <span className="text-sm font-black text-white">
+                              <span className={exLogs.length >= (p.seriesAlvo || 3) ? "text-green-400" : "text-blue-500"}>
+                                {exLogs.length}
+                              </span> / {p.seriesAlvo || 3}
+                            </span>
                           </div>
                         </div>
 
