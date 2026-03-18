@@ -161,6 +161,22 @@ app.get('/plans/:userId', async (req, res) => {
     }
 });
 
+// Atualizar Meta de Séries na Ficha
+app.put('/plans/:id', async (req, res) => {
+  const { id } = req.params;
+  const { seriesAlvo } = req.body;
+  try {
+    await prisma.workoutPlan.update({
+      where: { id: Number(id) },
+      data: { seriesAlvo: Number(seriesAlvo) }
+    });
+    res.json({ message: 'Meta atualizada com sucesso.' });
+  } catch (error) {
+    console.error("Erro ao atualizar meta:", error);
+    res.status(500).json({ error: 'Erro ao atualizar meta.' });
+  }
+});
+
 // Remover Exercício da Ficha
 app.delete('/plans/:id', async (req, res) => {
     const { id } = req.params;

@@ -49,9 +49,11 @@ model WorkoutPlan {
   userId     String
   exerciseId Int // Precisa ser INT para bater com Exercise.id
   ficha      String // "A", "B", "C"
-
+  seriesAlvo Int @default(3)
   user     User     @relation(fields: [userId], references: [id])
   exercise Exercise @relation(fields: [exerciseId], references: [id])
+
+  
 }
 
 model WorkoutLog {
