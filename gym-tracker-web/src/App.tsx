@@ -604,25 +604,40 @@ export default function App() {
                     const metaInt = p.seriesAlvo || 3;
                     const currentSerieNum = exLogs.length + 1;
 
+                    // Calcula quantas séries faltam para bater a meta (mínimo zero, para não quebrar se você fizer séries extras)
+                    const remainingSets = Math.max(0, metaInt - currentSerieNum);
+                    const emptySetsArray = Array.from({ length: remainingSets });
+
                     return (
                       <div key={p.id} className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-xl overflow-hidden relative">
 
-                        {/* CABEÇALHO DO EXERCÍCIO */}
-                        <div className="mb-6">
-                          <h3 className="font-black text-lg text-white leading-tight">{p.exercise.nome}</h3>
-                          <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">{p.exercise.grupoMuscular}</p>
+                        {/* CABEÇALHO DO EXERCÍCIO COM A META */}
+                        <div className="flex justify-between items-start mb-6">
+                          <div>
+                            <h3 className="font-black text-lg text-white leading-tight">{p.exercise.nome}</h3>
+                            <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">{p.exercise.grupoMuscular}</p>
+                          </div>
+
+                          <div className="bg-gray-900 px-3 py-1.5 rounded-xl border border-gray-700 flex flex-col items-center shadow-inner">
+                            <span className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">Meta</span>
+                            <span className="text-sm font-black text-white">
+                              <span className={exLogs.length >= metaInt ? "text-green-400" : "text-blue-500"}>
+                                {exLogs.length}
+                              </span> / {metaInt}
+                            </span>
+                          </div>
                         </div>
 
-                        {/* ÁREA VISUAL DAS SÉRIES (ESTRUTURA NOVA, TIPOGRAFIA ORIGINAL) */}
+                        {/* ÁREA VISUAL DAS SÉRIES (LINHA DO TEMPO COMPLETA) */}
                         <div className="space-y-3 relative mb-6">
                           {/* Linha vertical conectora */}
                           <div className="absolute left-4 top-4 bottom-4 w-px bg-gray-700 z-0"></div>
 
-                          {/* SÉRIES JÁ CONCLUÍDAS */}
+                          {/* 1. SÉRIES JÁ CONCLUÍDAS */}
                           {exLogs.map((log, idx) => (
                             <div key={log.id || idx} className="flex items-center gap-4 pl-0 z-10 relative">
                               <div className="w-8 h-8 rounded-full bg-gray-900 border border-gray-700 flex items-center justify-center shrink-0">
-                                <span className="text-[10px] font-bold text-gray-500">{idx + 1}</span>
+                                <span className="text-[10px] font-bold text-green-500">✓</span>
                               </div>
                               <div className="flex-1 flex items-center justify-between bg-gray-900/50 p-2 px-4 rounded-xl border border-gray-700/50">
                                 <div>
@@ -633,31 +648,45 @@ export default function App() {
                             </div>
                           ))}
 
-                          {/* SÉRIE ATUAL */}
-                          {currentSerieNum <= metaInt && (
-                            <div className="flex items-center gap-4 pl-0 z-10 relative mt-2">
-                              <div className="w-8 h-8 rounded-full bg-gray-900 border-2 border-blue-500 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(59,130,246,0.3)]">
-                                <span className="text-sm font-black text-white">{currentSerieNum}</span>
-                              </div>
-
-                              <div className="flex-1 flex gap-2">
-                                <input
-                                  type="number"
-                                  placeholder="kg"
-                                  className="w-full bg-gray-900 p-3 rounded-xl border border-gray-700 outline-none focus:border-blue-500 font-bold text-sm text-white text-center transition-colors"
-                                  value={cargas[p.exercise.id] || ''}
-                                  onChange={e => setCargas({ ...cargas, [p.exercise.id]: e.target.value })}
-                                />
-                                <input
-                                  type="number"
-                                  placeholder="reps"
-                                  className="w-full bg-gray-900 p-3 rounded-xl border border-gray-700 outline-none focus:border-blue-500 font-bold text-sm text-white text-center transition-colors"
-                                  value={repsSet[p.exercise.id] || ''}
-                                  onChange={e => setRepsSet({ ...repsSet, [p.exercise.id]: e.target.value })}
-                                />
-                              </div>
+                          {/* 2. SÉRIE ATUAL (Sempre aparece, mesmo se passar da meta) */}
+                          <div className="flex items-center gap-4 pl-0 z-10 relative mt-2">
+                            <div className="w-8 h-8 rounded-full bg-gray-900 border-2 border-blue-500 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(59,130,246,0.3)]">
+                              <span className="text-sm font-black text-white">{currentSerieNum}</span>
                             </div>
-                          )}
+
+                            <div className="flex-1 flex gap-2">
+                              <input
+                                type="number"
+                                placeholder="kg"
+                                className="w-full bg-gray-900 p-3 rounded-xl border border-gray-700 outline-none focus:border-blue-500 font-bold text-sm text-white text-center transition-colors"
+                                value={cargas[p.exercise.id] || ''}
+                                onChange={e => setCargas({ ...cargas, [p.exercise.id]: e.target.value })}
+                              />
+                              <input
+                                type="number"
+                                placeholder="reps"
+                                className="w-full bg-gray-900 p-3 rounded-xl border border-gray-700 outline-none focus:border-blue-500 font-bold text-sm text-white text-center transition-colors"
+                                value={repsSet[p.exercise.id] || ''}
+                                onChange={e => setRepsSet({ ...repsSet, [p.exercise.id]: e.target.value })}
+                              />
+                            </div>
+                          </div>
+
+                          {/* 3. SÉRIES FUTURAS (O que falta para a meta) */}
+                          {emptySetsArray.map((_, i) => {
+                            const setNum = currentSerieNum + 1 + i;
+                            return (
+                              <div key={`empty-${setNum}`} className="flex items-center gap-4 pl-0 z-10 relative mt-2 opacity-40">
+                                <div className="w-8 h-8 rounded-full bg-gray-900 border border-gray-700 flex items-center justify-center shrink-0">
+                                  <span className="text-[10px] font-bold text-gray-500">{setNum}</span>
+                                </div>
+                                <div className="flex-1 flex gap-2">
+                                  <div className="w-full bg-gray-900/50 p-3 rounded-xl border border-gray-700 h-11"></div>
+                                  <div className="w-full bg-gray-900/50 p-3 rounded-xl border border-gray-700 h-11"></div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {/* BOTÃO E FANTASMA */}
