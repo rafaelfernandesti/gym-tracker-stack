@@ -609,12 +609,12 @@ export default function App() {
 
                         {/* CABEÇALHO DO EXERCÍCIO */}
                         <div className="mb-6">
-                          <h3 className="font-black text-2xl text-white leading-tight uppercase tracking-tight">{p.exercise.nome}</h3>
-                          <p className="text-xs text-gray-500 uppercase tracking-widest mt-1 font-bold">{p.exercise.grupoMuscular}</p>
+                          <h3 className="font-black text-lg text-white leading-tight">{p.exercise.nome}</h3>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">{p.exercise.grupoMuscular}</p>
                         </div>
 
-                        {/* ÁREA VISUAL DAS SÉRIES (DESIGN PREMIUM) */}
-                        <div className="space-y-4 relative">
+                        {/* ÁREA VISUAL DAS SÉRIES (ESTRUTURA NOVA, TIPOGRAFIA ORIGINAL) */}
+                        <div className="space-y-3 relative mb-6">
                           {/* Linha vertical conectora */}
                           <div className="absolute left-4 top-4 bottom-4 w-px bg-gray-700 z-0"></div>
 
@@ -624,45 +624,54 @@ export default function App() {
                               <div className="w-8 h-8 rounded-full bg-gray-900 border border-gray-700 flex items-center justify-center shrink-0">
                                 <span className="text-[10px] font-bold text-gray-500">{idx + 1}</span>
                               </div>
-                              <div className="flex gap-1.5 items-end flex-1">
-                                <span className="text-2xl font-bold italic text-white/50">{log.carga}</span>
-                                <span className="text-[10px] font-medium text-gray-600 pb-1 mb-px">kg</span>
-                                <span className="text-2xl font-bold italic text-white/50 ml-2">×</span>
-                                <span className="text-2xl font-bold italic text-white/50 ml-2">{log.reps}</span>
-                                <span className="text-[10px] font-medium text-gray-600 pb-1 mb-px">reps</span>
+                              <div className="flex-1 flex items-center justify-between bg-gray-900/50 p-2 px-4 rounded-xl border border-gray-700/50">
+                                <div>
+                                  <span className="text-sm font-black text-white">{log.carga} <span className="text-gray-500 font-normal text-xs">kg ×</span> {log.reps} <span className="text-gray-500 font-normal text-xs">reps</span></span>
+                                </div>
+                                <button onClick={() => log.id && handleDeleteSerie(log.id)} className="text-red-500 hover:text-red-400 font-bold p-1 text-xs opacity-70 hover:opacity-100 transition-opacity">✕</button>
                               </div>
-                              <button onClick={() => log.id && handleDeleteSerie(log.id)} className="text-red-500/50 hover:text-red-500 font-bold p-2 text-xs transition-colors">✕</button>
                             </div>
                           ))}
 
                           {/* SÉRIE ATUAL */}
                           {currentSerieNum <= metaInt && (
                             <div className="flex items-center gap-4 pl-0 z-10 relative mt-2">
-                              <div className="w-8 h-8 rounded-full bg-gray-900 border-2 border-green-500 flex items-center justify-center shrink-0">
+                              <div className="w-8 h-8 rounded-full bg-gray-900 border-2 border-blue-500 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(59,130,246,0.3)]">
                                 <span className="text-sm font-black text-white">{currentSerieNum}</span>
                               </div>
 
                               <div className="flex-1 flex gap-2">
-                                <div className="relative flex-1">
-                                  <input type="number" inputMode="numeric" placeholder="0" className="w-full bg-gray-900/50 p-3 pt-5 pb-2 rounded-xl border border-gray-700 outline-none focus:border-blue-500 text-2xl font-black italic text-white text-center transition-colors" value={cargas[p.exercise.id] || ''} onChange={e => setCargas({ ...cargas, [p.exercise.id]: e.target.value })} />
-                                  <span className="absolute right-2 bottom-2 text-[8px] text-gray-600 font-bold uppercase tracking-wider">kg</span>
-                                </div>
-                                <div className="relative flex-1">
-                                  <input type="number" inputMode="numeric" placeholder="0" className="w-full bg-gray-900/50 p-3 pt-5 pb-2 rounded-xl border border-gray-700 outline-none focus:border-blue-500 text-2xl font-black italic text-white text-center transition-colors" value={repsSet[p.exercise.id] || ''} onChange={e => setRepsSet({ ...repsSet, [p.exercise.id]: e.target.value })} />
-                                  <span className="absolute right-2 bottom-2 text-[8px] text-gray-600 font-bold uppercase tracking-wider">Reps</span>
-                                </div>
+                                <input
+                                  type="number"
+                                  placeholder="kg"
+                                  className="w-full bg-gray-900 p-3 rounded-xl border border-gray-700 outline-none focus:border-blue-500 font-bold text-sm text-white text-center transition-colors"
+                                  value={cargas[p.exercise.id] || ''}
+                                  onChange={e => setCargas({ ...cargas, [p.exercise.id]: e.target.value })}
+                                />
+                                <input
+                                  type="number"
+                                  placeholder="reps"
+                                  className="w-full bg-gray-900 p-3 rounded-xl border border-gray-700 outline-none focus:border-blue-500 font-bold text-sm text-white text-center transition-colors"
+                                  value={repsSet[p.exercise.id] || ''}
+                                  onChange={e => setRepsSet({ ...repsSet, [p.exercise.id]: e.target.value })}
+                                />
                               </div>
                             </div>
                           )}
                         </div>
 
                         {/* BOTÃO E FANTASMA */}
-                        <div className="mt-6 flex flex-col gap-2">
-                          <button onClick={() => handleAddSerie(p.exercise.id)} disabled={!cargas[p.exercise.id] || !repsSet[p.exercise.id]} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-gray-800 py-4 rounded-xl font-black uppercase text-xs tracking-widest text-white transition-all shadow-lg shadow-blue-500/10">
-                            REGISTRAR SÉRIE
+                        <div className="flex flex-col gap-3">
+                          <button
+                            onClick={() => handleAddSerie(p.exercise.id)}
+                            disabled={!cargas[p.exercise.id] || !repsSet[p.exercise.id]}
+                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed py-3 rounded-xl font-black text-[11px] uppercase tracking-wider transition-colors"
+                          >
+                            + SÉRIE
                           </button>
+
                           {fantasma && (
-                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest text-center mt-2">
+                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest text-center mt-1">
                               Último Treino: <span className="text-blue-400">{fantasma.carga}kg × {fantasma.repsFeitas} reps</span>
                             </p>
                           )}
