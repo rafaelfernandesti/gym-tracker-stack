@@ -263,6 +263,43 @@ export default function App() {
     } else alert(data.error);
   };
 
+  // Lógica de Arrastar e Soltar
+  const handleDragStart = (e: React.DragEvent, id: number) => {
+    e.dataTransfer.setData('text/plain', id.toString());
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    const sourceId = Number(e.dataTransfer.getData('text/plain'));
+    if (sourceId === targetId) return;
+
+    // Pega os exercícios da ficha atual e reordena
+    const currentPlanItems = [...myPlans.filter(p => p.ficha === fichaAtiva)].sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    const sourceIndex = currentPlanItems.findIndex(p => p.id === sourceId);
+    const targetIndex = currentPlanItems.findIndex(p => p.id === targetId);
+
+    const [removed] = currentPlanItems.splice(sourceIndex, 1);
+    currentPlanItems.splice(targetIndex, 0, removed);
+
+    // Atualiza a tela na hora (para não travar o usuário)
+    const newMyPlans = myPlans.map(p => {
+      if (p.ficha !== fichaAtiva) return p;
+      const newIndex = currentPlanItems.findIndex(item => item.id === p.id);
+      return { ...p, ordem: newIndex };
+    });
+    setMyPlans(newMyPlans);
+
+    // Manda silenciosamente para o servidor salvar a nova ordem
+    const updates = currentPlanItems.map((item, index) => ({ id: item.id, ordem: index }));
+    await fetch(`${API_URL}/plans/reorder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ updates })
+    });
+  };
+
+
+
   const handleMudarSenha = async (e: any) => {
     e.preventDefault();
     if (!novaSenha) return;
@@ -505,7 +542,7 @@ export default function App() {
     );
   }
 
-  const exerciciosAtuais = myPlans.filter(p => p.ficha === fichaAtiva);
+  const exerciciosAtuais = myPlans.filter(p => p.ficha === fichaAtiva).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   const customExercises = library.filter(ex => ex.userId === user.id);
 
   return (
@@ -538,7 +575,7 @@ export default function App() {
 
                 <div className="space-y-2 mb-6 max-h-60 overflow-y-auto pr-2 scrollbar-hide">
                   {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
-                    <div key={p.id} className="bg-gray-800 p-4 rounded-2xl border border-gray-700 flex justify-between items-center shadow-sm">
+                    <div key={p.id} draggable onDragStart={(e) => handleDragStart(e, p.id)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, p.id)} className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-lg relative overflow-hidden cursor-move active:scale-[0.98] transition-all">
                       <div>
                         <p className="font-bold text-white">{p.exercise.nome}</p>
                         <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{p.exercise.grupoMuscular}</p>
@@ -690,269 +727,278 @@ export default function App() {
                   </button>
                 </div>
               </div>
-            )}
-          </div>
+            )
+            }
+          </div >
         )}
 
         {/* ABA FICHAS */}
-        {activeTab === 'fichas' && (
-          <div className="space-y-6 animate-in slide-in-from-bottom">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-xl font-bold">Configurar Fichas</h2>
-              <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-blue-500/30">+ EXERCÍCIO</button>
-            </div>
+        {
+          activeTab === 'fichas' && (
+            <div className="space-y-6 animate-in slide-in-from-bottom">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-xl font-bold">Configurar Fichas</h2>
+                <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-blue-500/30">+ EXERCÍCIO</button>
+              </div>
 
-            <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
-              {['A', 'B', 'C'].map(f => (
-                <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Ficha {f}</button>
-              ))}
-            </div>
+              <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
+                {['A', 'B', 'C'].map(f => (
+                  <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Ficha {f}</button>
+                ))}
+              </div>
 
-            <div className="space-y-3">
-              {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
-                <div key={p.id} className="bg-gray-800 p-4 rounded-2xl border border-gray-700 flex justify-between items-center shadow-sm">
-                  <div>
-                    <p className="font-bold text-white">{p.exercise.nome}</p>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{p.exercise.grupoMuscular}</p>
+              <div className="space-y-3">
+                {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
+                  <div
+                    key={p.id}
+                    draggable // Ativa o arrastar
+                    onDragStart={(e) => handleDragStart(e, p.id)} // Quando começa a puxar
+                    onDragOver={(e) => e.preventDefault()} // Permite soltar por cima
+                    onDrop={(e) => handleDrop(e, p.id)} // O que acontece quando solta
+                    className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-lg relative overflow-hidden cursor-move active:scale-[0.98] transition-all" // Note o cursor-move aqui
+                  >
+                    )) : (
+                    <div className="text-center py-10 bg-gray-800/50 rounded-2xl border border-gray-800 border-dashed">
+                      <p className="text-gray-500">Nenhum exercício na Ficha {fichaAtiva}.</p>
+                    </div>
+              )}
                   </div>
-                  <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors">✕</button>
-                </div>
-              )) : (
-                <div className="text-center py-10 bg-gray-800/50 rounded-2xl border border-gray-800 border-dashed">
-                  <p className="text-gray-500">Nenhum exercício na Ficha {fichaAtiva}.</p>
+          </div>
+        )}
+
+              {/* ABA EVOLUÇÃO */}
+              {activeTab === 'evolucao' && (
+                <div className="space-y-6 animate-in slide-in-from-bottom">
+                  <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-64 flex flex-col">
+                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Total de Carga (kg)</h3>
+                    <div className="flex-1 min-h-0">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={volumeHistory.map((v: any) => ({ ...v, d: new Date(v.data).getDate() }))}>
+                          <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                          <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                          <Bar dataKey="volume" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-80 flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
+                      <form onSubmit={handleRegistrarPeso} className="flex gap-2">
+                        <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
+                        <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
+                      </form>
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }))}>
+                          <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                          <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                          <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg mb-8">
+                    <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Frequência Mensal</h3>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {Array.from({ length: 30 }).map((_, i) => {
+                        const d = new Date();
+                        d.setDate(d.getDate() - (29 - i));
+                        const ano = d.getFullYear();
+                        const mes = d.getMonth();
+                        const dia = d.getDate();
+                        const iso = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+
+                        const treinou = frequency.some((isoDateString: string) => {
+                          const dataTreino = new Date(isoDateString);
+                          return dataTreino.getFullYear() === ano &&
+                            dataTreino.getMonth() === mes &&
+                            dataTreino.getDate() === dia;
+                        });
+
+                        return (
+                          <button
+                            key={iso}
+                            onClick={() => treinou && handleOpenReport(iso)}
+                            className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
+                          >
+                            {dia}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
-          </div>
-        )}
 
-        {/* ABA EVOLUÇÃO */}
-        {activeTab === 'evolucao' && (
-          <div className="space-y-6 animate-in slide-in-from-bottom">
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-64 flex flex-col">
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Total de Carga (kg)</h3>
-              <div className="flex-1 min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={volumeHistory.map((v: any) => ({ ...v, d: new Date(v.data).getDate() }))}>
-                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
-                    <Bar dataKey="volume" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+              {/* ABA PERFIL */}
+              {activeTab === 'perfil' && (
+                <div className="space-y-6 animate-in slide-in-from-bottom">
+                  <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
+                    <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4">
+                      <span className="text-2xl font-black text-gray-500">{user.email.substring(0, 2).toUpperCase()}</span>
+                    </div>
+                    <h2 className="text-xl font-bold mb-1">{user.email}</h2>
+                    <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
 
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-80 flex flex-col">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
-                <form onSubmit={handleRegistrarPeso} className="flex gap-2">
-                  <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
-                  <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
-                </form>
-              </div>
-              <div className="flex-1 min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }))}>
-                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
-                    <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+                    {/* FORMULÁRIO DE TROCA DE SENHA */}
+                    <form onSubmit={handleMudarSenha} className="mb-8 space-y-3 bg-gray-900 p-4 rounded-2xl border border-gray-700 text-left">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-2">Segurança</p>
+                      <input
+                        type="password"
+                        placeholder="Digitar nova senha"
+                        className="w-full bg-gray-800 p-4 rounded-xl border border-gray-700 outline-none text-sm focus:border-blue-500 transition-colors"
+                        value={novaSenha}
+                        onChange={e => setNovaSenha(e.target.value)}
+                      />
+                      <button
+                        disabled={!novaSenha}
+                        className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-blue-500/20"
+                      >
+                        Atualizar Senha
+                      </button>
+                    </form>
 
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg mb-8">
-              <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Frequência Mensal</h3>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {Array.from({ length: 30 }).map((_, i) => {
-                  const d = new Date();
-                  d.setDate(d.getDate() - (29 - i));
-                  const ano = d.getFullYear();
-                  const mes = d.getMonth();
-                  const dia = d.getDate();
-                  const iso = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-
-                  const treinou = frequency.some((isoDateString: string) => {
-                    const dataTreino = new Date(isoDateString);
-                    return dataTreino.getFullYear() === ano &&
-                      dataTreino.getMonth() === mes &&
-                      dataTreino.getDate() === dia;
-                  });
-
-                  return (
-                    <button
-                      key={iso}
-                      onClick={() => treinou && handleOpenReport(iso)}
-                      className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
-                    >
-                      {dia}
+                    <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
+                      Sair da Conta
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ABA PERFIL */}
-        {activeTab === 'perfil' && (
-          <div className="space-y-6 animate-in slide-in-from-bottom">
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
-              <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4">
-                <span className="text-2xl font-black text-gray-500">{user.email.substring(0, 2).toUpperCase()}</span>
-              </div>
-              <h2 className="text-xl font-bold mb-1">{user.email}</h2>
-              <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
-
-              {/* FORMULÁRIO DE TROCA DE SENHA */}
-              <form onSubmit={handleMudarSenha} className="mb-8 space-y-3 bg-gray-900 p-4 rounded-2xl border border-gray-700 text-left">
-                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-2">Segurança</p>
-                <input
-                  type="password"
-                  placeholder="Digitar nova senha"
-                  className="w-full bg-gray-800 p-4 rounded-xl border border-gray-700 outline-none text-sm focus:border-blue-500 transition-colors"
-                  value={novaSenha}
-                  onChange={e => setNovaSenha(e.target.value)}
-                />
-                <button
-                  disabled={!novaSenha}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-blue-500/20"
-                >
-                  Atualizar Senha
-                </button>
-              </form>
-
-              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
-                Sair da Conta
-              </button>
-            </div>
-          </div>
-        )}
-      </main>
+                  </div>
+                </div>
+              )}
+            </main>
 
       {/* MODAL SELETOR DE TREINOS DO DIA */}
-      {daySessions && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in">
-          <div className="bg-gray-900 p-6 rounded-3xl border border-gray-700 max-w-sm w-full shadow-2xl">
-            <h3 className="text-xl font-bold mb-4 text-white text-center">Treinos do Dia</h3>
-            <div className="space-y-3">
-              {daySessions.map((sess, i) => (
-                <button
-                  key={sess.id}
-                  onClick={() => {
-                    setSelectedReport(sess);
-                    setDaySessions(null);
-                  }}
-                  className="w-full bg-gray-800 p-4 rounded-xl flex justify-between items-center border border-gray-700 hover:bg-blue-600 transition-colors group"
-                >
-                  <span className="font-bold text-white">Sessão {i + 1}</span>
-                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">
-                    {new Date(sess.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </button>
-              ))}
+        {
+          daySessions && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center p-4 animate-in fade-in">
+              <div className="bg-gray-900 p-6 rounded-3xl border border-gray-700 max-w-sm w-full shadow-2xl">
+                <h3 className="text-xl font-bold mb-4 text-white text-center">Treinos do Dia</h3>
+                <div className="space-y-3">
+                  {daySessions.map((sess, i) => (
+                    <button
+                      key={sess.id}
+                      onClick={() => {
+                        setSelectedReport(sess);
+                        setDaySessions(null);
+                      }}
+                      className="w-full bg-gray-800 p-4 rounded-xl flex justify-between items-center border border-gray-700 hover:bg-blue-600 transition-colors group"
+                    >
+                      <span className="font-bold text-white">Sessão {i + 1}</span>
+                      <span className="text-xs text-gray-400 group-hover:text-white transition-colors">
+                        {new Date(sess.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setDaySessions(null)} className="w-full mt-4 p-3 font-bold text-gray-500 hover:text-white uppercase tracking-widest text-xs transition-colors">Cancelar</button>
+              </div>
             </div>
-            <button onClick={() => setDaySessions(null)} className="w-full mt-4 p-3 font-bold text-gray-500 hover:text-white uppercase tracking-widest text-xs transition-colors">Cancelar</button>
-          </div>
-        </div>
-      )}
+          )
+        }
 
-      {/* MODAL BIBLIOTECA & CRIAÇÃO */}
-      {isLibraryOpen && (
-        <div className="fixed inset-0 bg-gray-950 z-50 flex flex-col animate-in slide-in-from-bottom duration-200">
-          <header className="p-6 flex justify-between items-center border-b border-gray-800 bg-gray-900">
-            <h2 className="text-xl font-bold">Adicionar Exercício</h2>
-            <button onClick={() => setIsLibraryOpen(false)} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
-          </header>
+        {/* MODAL BIBLIOTECA & CRIAÇÃO */}
+        {
+          isLibraryOpen && (
+            <div className="fixed inset-0 bg-gray-950 z-50 flex flex-col animate-in slide-in-from-bottom duration-200">
+              <header className="p-6 flex justify-between items-center border-b border-gray-800 bg-gray-900">
+                <h2 className="text-xl font-bold">Adicionar Exercício</h2>
+                <button onClick={() => setIsLibraryOpen(false)} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+              </header>
 
-          <div className="flex bg-gray-900 border-b border-gray-800 p-2">
-            <button onClick={() => setLibTab('global')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors ${libTab === 'global' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Biblioteca Global</button>
-            <button onClick={() => setLibTab('custom')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors ${libTab === 'custom' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Meus Exercícios</button>
-          </div>
+              <div className="flex bg-gray-900 border-b border-gray-800 p-2">
+                <button onClick={() => setLibTab('global')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors ${libTab === 'global' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Biblioteca Global</button>
+                <button onClick={() => setLibTab('custom')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors ${libTab === 'custom' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Meus Exercícios</button>
+              </div>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-20">
-            {libTab === 'global' ? (
-              ['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(grupo => (
-                <div key={grupo}>
-                  <h3 className="text-blue-500 text-[11px] font-black uppercase mb-3 tracking-widest">{grupo}</h3>
-                  <div className="space-y-2">
-                    {library.filter(ex => ex.grupoMuscular === grupo && !ex.userId).map(ex => (
-                      <div key={ex.id} className="bg-gray-800 p-4 rounded-2xl flex justify-between items-center border border-gray-700">
-                        <span className="font-bold text-sm text-white">{ex.nome}</span>
-                        <div className="flex gap-1">
-                          {['A', 'B', 'C'].map(f => (
-                            <button key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors">+{f}</button>
+              <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-20">
+                {libTab === 'global' ? (
+                  ['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(grupo => (
+                    <div key={grupo}>
+                      <h3 className="text-blue-500 text-[11px] font-black uppercase mb-3 tracking-widest">{grupo}</h3>
+                      <div className="space-y-2">
+                        {library.filter(ex => ex.grupoMuscular === grupo && !ex.userId).map(ex => (
+                          <div key={ex.id} className="bg-gray-800 p-4 rounded-2xl flex justify-between items-center border border-gray-700">
+                            <span className="font-bold text-sm text-white">{ex.nome}</span>
+                            <div className="flex gap-1">
+                              {['A', 'B', 'C'].map(f => (
+                                <button key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors">+{f}</button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="space-y-6">
+                    <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700">
+                      <h3 className="text-lg font-bold mb-4">Novo Exercício</h3>
+                      <form onSubmit={handleCreateCustomExercise} className="space-y-4">
+                        <input type="text" placeholder="Nome (Ex: Supino Declinado)" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExNome} onChange={e => setNovoExNome(e.target.value)} required />
+                        <select className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExGrupo} onChange={e => setNovoExGrupo(e.target.value)}>
+                          {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                        <button className="w-full bg-green-600 py-4 rounded-xl font-bold">SALVAR</button>
+                      </form>
+                    </div>
+
+                    {customExercises.length > 0 && (
+                      <div>
+                        <h3 className="text-gray-400 text-[11px] font-black uppercase mb-3 tracking-widest">Criados por você</h3>
+                        <div className="space-y-2">
+                          {customExercises.map(ex => (
+                            <div key={ex.id} className="bg-gray-800 p-4 rounded-2xl flex justify-between items-center border border-gray-700">
+                              <div>
+                                <span className="font-bold text-sm text-white block">{ex.nome}</span>
+                                <span className="text-[10px] text-gray-500 uppercase">{ex.grupoMuscular}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {['A', 'B', 'C'].map(f => (
+                                  <button key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-2 py-1 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors">+{f}</button>
+                                ))}
+                                <div className="w-px h-6 bg-gray-700 mx-1"></div>
+                                <button onClick={() => handleDeleteCustomExercise(ex.id)} className="text-red-500 hover:text-red-400 p-1">✕</button>
+                              </div>
+                            </div>
                           ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="space-y-6">
-                <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700">
-                  <h3 className="text-lg font-bold mb-4">Novo Exercício</h3>
-                  <form onSubmit={handleCreateCustomExercise} className="space-y-4">
-                    <input type="text" placeholder="Nome (Ex: Supino Declinado)" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExNome} onChange={e => setNovoExNome(e.target.value)} required />
-                    <select className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExGrupo} onChange={e => setNovoExGrupo(e.target.value)}>
-                      {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                    <button className="w-full bg-green-600 py-4 rounded-xl font-bold">SALVAR</button>
-                  </form>
-                </div>
-
-                {customExercises.length > 0 && (
-                  <div>
-                    <h3 className="text-gray-400 text-[11px] font-black uppercase mb-3 tracking-widest">Criados por você</h3>
-                    <div className="space-y-2">
-                      {customExercises.map(ex => (
-                        <div key={ex.id} className="bg-gray-800 p-4 rounded-2xl flex justify-between items-center border border-gray-700">
-                          <div>
-                            <span className="font-bold text-sm text-white block">{ex.nome}</span>
-                            <span className="text-[10px] text-gray-500 uppercase">{ex.grupoMuscular}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            {['A', 'B', 'C'].map(f => (
-                              <button key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-2 py-1 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors">+{f}</button>
-                            ))}
-                            <div className="w-px h-6 bg-gray-700 mx-1"></div>
-                            <button onClick={() => handleDeleteCustomExercise(ex.id)} className="text-red-500 hover:text-red-400 p-1">✕</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
-      )}
+            </div>
+          )
+        }
 
-      {/* MODAL RELATÓRIO */}
-      {selectedReport && (
-        <ReportModal
-          sessionData={selectedReport}
-          allExercises={library}
-          onClose={() => setSelectedReport(null)}
-          onShare={shareReport}
-          onDelete={async () => {
-            if (confirm("Excluir treino?")) {
-              await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
-              setSelectedReport(null); fetchData();
-            }
-          }}
-        />
-      )}
+        {/* MODAL RELATÓRIO */}
+        {
+          selectedReport && (
+            <ReportModal
+              sessionData={selectedReport}
+              allExercises={library}
+              onClose={() => setSelectedReport(null)}
+              onShare={shareReport}
+              onDelete={async () => {
+                if (confirm("Excluir treino?")) {
+                  await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
+                  setSelectedReport(null); fetchData();
+                }
+              }}
+            />
+          )
+        }
 
-      {/* NAVEGAÇÃO BOTTOM */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 p-3 flex justify-around z-40 max-w-md mx-auto rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-        <button onClick={() => setActiveTab('treinar')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'treinar' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Treinar</button>
-        <button onClick={() => setActiveTab('fichas')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'fichas' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Fichas</button>
-        <button onClick={() => setActiveTab('evolucao')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'evolucao' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Evolução</button>
-        <button onClick={() => setActiveTab('perfil')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'perfil' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Perfil</button>
-      </nav>
-    </div>
+        {/* NAVEGAÇÃO BOTTOM */}
+        <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 p-3 flex justify-around z-40 max-w-md mx-auto rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+          <button onClick={() => setActiveTab('treinar')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'treinar' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Treinar</button>
+          <button onClick={() => setActiveTab('fichas')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'fichas' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Fichas</button>
+          <button onClick={() => setActiveTab('evolucao')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'evolucao' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Evolução</button>
+          <button onClick={() => setActiveTab('perfil')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'perfil' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Perfil</button>
+        </nav>
+    </div >
   );
 }
