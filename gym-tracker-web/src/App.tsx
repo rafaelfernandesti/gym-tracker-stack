@@ -757,14 +757,34 @@ export default function App() {
                     onDrop={(e) => handleDrop(e, p.id)} // O que acontece quando solta
                     className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-lg relative overflow-hidden cursor-move active:scale-[0.98] transition-all" // Note o cursor-move aqui
                   >
-                    )) : (
-                    <div className="text-center py-10 bg-gray-800/50 rounded-2xl border border-gray-800 border-dashed">
-                      <p className="text-gray-500">Nenhum exercício na Ficha {fichaAtiva}.</p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-bold text-white">{p.exercise.nome}</p>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{p.exercise.grupoMuscular}</p>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] text-gray-500 uppercase font-bold mb-1">Séries</span>
+                          <input
+                            type="number"
+                            min="1"
+                            className="w-12 bg-gray-900 text-center text-sm font-bold py-1 rounded-lg border border-gray-700 outline-none text-white focus:border-blue-500 transition-colors"
+                            value={p.seriesAlvo || 3}
+                            onChange={(e) => handleUpdateSeries(p.id, Number(e.target.value))}
+                          />
+                        </div>
+                        <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors">✕</button>
+                      </div>
                     </div>
-              )}
                   </div>
-          </div>
-        )}
+                )) : (
+                  <div className="text-center py-10 bg-gray-800/50 rounded-2xl border border-gray-800 border-dashed">
+                    <p className="text-gray-500">Nenhum exercício na Ficha {fichaAtiva}.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
               {/* ABA EVOLUÇÃO */}
               {activeTab === 'evolucao' && (
