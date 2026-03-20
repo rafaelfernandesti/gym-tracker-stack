@@ -149,32 +149,48 @@ app.get('/plans/:userId', async (req, res) => {
     try {
         const plans = await prisma.workoutPlan.findMany({
             where: { userId },
-            include: {
-                exercise: true // Isso traz os dados do exercício (nome, grupoMuscular)
-            },
-            orderBy: { ficha: 'asc' }
+            include: { exercise: true },
+            orderBy: { ordem: 'asc' } // <-- GARANTA QUE ESTA LINHA EXISTA
         });
         res.json(plans);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Erro ao buscar sua ficha.' });
+        res.status(500).json({ error: 'Erro ao buscar fichas.' });
     }
 });
 
+// Reordenar Exercícios (Drag and Drop)
+app.put('/plans/reorder', async (req, res) => {
+    const { updates } = req.body; // Recebe uma lista de { id, ordem }
+    try {
+        // Atualiza a ordem de vários exercícios de uma vez só
+        const transactions = updates.map((u: any) =>
+            prisma.workoutPlan.update({
+                where: { id: Number(u.id) },
+                data: { ordem: Number(u.ordem) }
+            })
+        );
+        await prisma.$transaction(transactions);
+        res.json({ message: 'Ordem salva!' });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao reordenar.' });
+    }
+});
+
+
 // Atualizar Meta de Séries na Ficha
 app.put('/plans/:id', async (req, res) => {
-  const { id } = req.params;
-  const { seriesAlvo } = req.body;
-  try {
-    await prisma.workoutPlan.update({
-      where: { id: Number(id) },
-      data: { seriesAlvo: Number(seriesAlvo) }
-    });
-    res.json({ message: 'Meta atualizada com sucesso.' });
-  } catch (error) {
-    console.error("Erro ao atualizar meta:", error);
-    res.status(500).json({ error: 'Erro ao atualizar meta.' });
-  }
+    const { id } = req.params;
+    const { seriesAlvo } = req.body;
+    try {
+        await prisma.workoutPlan.update({
+            where: { id: Number(id) },
+            data: { seriesAlvo: Number(seriesAlvo) }
+        });
+        res.json({ message: 'Meta atualizada com sucesso.' });
+    } catch (error) {
+        console.error("Erro ao atualizar meta:", error);
+        res.status(500).json({ error: 'Erro ao atualizar meta.' });
+    }
 });
 
 // Remover Exercício da Ficha
