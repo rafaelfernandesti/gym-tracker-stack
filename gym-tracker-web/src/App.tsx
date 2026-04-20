@@ -145,6 +145,7 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
 
 // --- APLICATIVO ---
 export default function App() {
+  const wakeLockRef = useRef<any>(null);
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'treinar' | 'fichas' | 'evolucao' | 'perfil'>('treinar');
   const [fichaAtiva, setFichaAtiva] = useState('A');
@@ -200,6 +201,55 @@ export default function App() {
   useEffect(() => {
     if (user) fetchData();
   }, [user]);
+
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      try {
+        if (!activeSession || !('wakeLock' in navigator) || document.hidden) return;
+
+        if (wakeLockRef.current) return;
+
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        wakeLockRef.current?.addEventListener?.('release', () => {
+          wakeLockRef.current = null;
+        });
+      } catch (e) {
+        console.error('Wake Lock falhou', e);
+        wakeLockRef.current = null;
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      try {
+        await wakeLockRef.current?.release();
+      } catch (e) {
+        console.error('Erro ao liberar Wake Lock', e);
+      } finally {
+        wakeLockRef.current = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        releaseWakeLock();
+      } else if (activeSession) {
+        requestWakeLock();
+      }
+    };
+
+    if (activeSession) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      releaseWakeLock();
+    };
+  }, [activeSession]);
 
   // Cronômetro Geral
   useEffect(() => {
