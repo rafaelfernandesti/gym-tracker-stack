@@ -181,6 +181,7 @@ export default function App() {
   // Cronômetros
   const [elapsedTime, setElapsedTime] = useState('00:00');
   const [restTime, setRestTime] = useState(0);
+  const [restEndTime, setRestEndTime] = useState<number | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('@GymTracker:user');
@@ -220,14 +221,54 @@ export default function App() {
 
   // Cronômetro de Descanso
   useEffect(() => {
-    if (restTime > 0) {
-      const timerId = setTimeout(() => {
-        if (restTime === 1) dispararAlarmeDescanso();
-        setRestTime(restTime - 1);
-      }, 1000);
-      return () => clearTimeout(timerId);
+    if (!restEndTime) {
+      setRestTime(0);
+      return;
     }
-  }, [restTime]);
+
+    let finished = false;
+
+    const syncRestTimer = () => {
+      if (finished) return;
+
+      const remaining = Math.max(0, Math.ceil((restEndTime - Date.now()) / 1000));
+
+      if (remaining === 0) {
+        finished = true;
+        setRestTime(0);
+        setRestEndTime(null);
+        dispararAlarmeDescanso();
+        return;
+      }
+
+      setRestTime(prev => (prev === remaining ? prev : remaining));
+    };
+
+    syncRestTimer();
+
+    const intervalId = window.setInterval(syncRestTimer, 250);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) syncRestTimer();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      finished = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [restEndTime]);
+
+  const startRestTimer = (seconds: number) => {
+    setRestEndTime(Date.now() + seconds * 1000);
+    setRestTime(seconds);
+  };
+
+  const stopRestTimer = () => {
+    setRestEndTime(null);
+    setRestTime(0);
+  };
 
   const fetchData = async () => {
     try {
@@ -333,7 +374,7 @@ export default function App() {
 
       //setCargas({ ...cargas, [exId]: '' });
       //setRepsSet({ ...repsSet, [exId]: '' });
-      setRestTime(60);
+      startRestTimer(60);
     }
   };
 
@@ -365,7 +406,7 @@ export default function App() {
 
       setActiveSession(null);
       setCurrentLogs([]);
-      setRestTime(0);
+      stopRestTimer();
       localStorage.removeItem('@GymTracker:activeSession');
 
       fetchData();
@@ -383,7 +424,7 @@ export default function App() {
     if (res.ok) {
       setActiveSession(null);
       setCurrentLogs([]);
-      setRestTime(0);
+      stopRestTimer();
       localStorage.removeItem('@GymTracker:activeSession');
       fetchData(); // Recarrega gráficos limpos
     }
@@ -592,7 +633,7 @@ export default function App() {
                     <div className="mt-3 bg-blue-900/40 p-2 rounded-xl border border-blue-500/30 flex justify-between items-center animate-pulse">
                       <span className="text-blue-400 text-[10px] font-bold uppercase tracking-widest pl-2">Descanso</span>
                       <span className="text-xl font-black font-mono text-white">00:{restTime.toString().padStart(2, '0')}</span>
-                      <button onClick={() => setRestTime(0)} className="bg-gray-900 px-3 py-1 rounded-lg text-[10px] text-gray-400 font-bold hover:text-white">PULAR</button>
+                      <button onClick={stopRestTimer} className="bg-gray-900 px-3 py-1 rounded-lg text-[10px] text-gray-400 font-bold hover:text-white">PULAR</button>
                     </div>
                   )}
                 </div>
