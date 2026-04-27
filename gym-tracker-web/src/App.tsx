@@ -33,7 +33,7 @@ const dispararAlarmeDescanso = () => {
 };
 
 // --- COMPONENTE DO RELATÓRIO PRINTÁVEL ---
-function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: any) {
+function ReportModal({ sessionData, allExercises, user, onClose, onShare, onDelete }: any) {
   const reportRef = useRef<HTMLDivElement>(null);
   if (!sessionData) return null;
 
@@ -76,11 +76,33 @@ function ReportModal({ sessionData, allExercises, onClose, onShare, onDelete }: 
 
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-blue-600/20 to-transparent"></div>
 
-        <header className="text-center mb-6 relative z-10">
-          <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
-          <p className="text-xs text-gray-400 uppercase font-bold mt-2 tracking-widest">Resumo de Conquista</p>
-          <p className="text-sm text-gray-200 mt-1 font-medium">{dataFormatada}</p>
-        </header>
+        {/* NOVO CABEÇALHO DO RELATÓRIO COM PERFIL */}
+        <div className="flex justify-between items-center w-full mb-8 relative z-10 border-b border-gray-800/80 pb-5">
+
+          {/* Perfil do Atleta */}
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center border-2 border-gray-700 overflow-hidden shadow-lg shrink-0">
+              {user?.foto ? (
+                <img src={user.foto} alt="Atleta" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-sm font-black text-gray-400">{user?.email?.substring(0, 2).toUpperCase()}</span>
+              )}
+            </div>
+            <div className="text-left">
+              <p className="text-[9px] text-gray-500 uppercase font-bold tracking-widest leading-none mb-1">Atleta</p>
+              <p className="text-sm font-black text-white capitalize truncate max-w-[100px]">
+                {user?.email?.split('@')[0].replace('.', ' ')}
+              </p>
+            </div>
+          </div>
+
+          {/* Logo e Data */}
+          <div className="text-right">
+            <h1 className="text-lg font-black text-blue-500 tracking-tight leading-none">GYM<span className="text-white">TRACKER</span></h1>
+            <p className="text-[8px] text-gray-400 uppercase font-bold mt-1.5 tracking-widest">{dataFormatada}</p>
+          </div>
+
+        </div>
 
         <div className="grid grid-cols-2 gap-4 mb-6 relative z-10">
           <div className="bg-gray-800/80 backdrop-blur-md p-4 rounded-2xl text-center border border-gray-700 shadow-inner">
@@ -1072,22 +1094,21 @@ export default function App() {
         )
       }
 
-      {/* MODAL RELATÓRIO */}
-      {
-        selectedReport && (
-          <ReportModal
-            sessionData={selectedReport}
-            allExercises={library}
-            onClose={() => setSelectedReport(null)}
-            onShare={shareReport}
-            onDelete={async () => {
-              if (confirm("Excluir treino?")) {
-                await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
-                setSelectedReport(null); fetchData();
-              }
-            }}
-          />
-        )
+      {selectedReport && (
+        <ReportModal
+          sessionData={selectedReport}
+          allExercises={library}
+          user={user} // <--- ADICIONE ESTA LINHA AQUI
+          onClose={() => setSelectedReport(null)}
+          onShare={shareReport}
+          onDelete={async () => {
+            if (confirm("Excluir treino?")) {
+              await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
+              setSelectedReport(null); fetchData();
+            }
+          }}
+        />
+      )
       }
 
       {/* NAVEGAÇÃO BOTTOM */}
