@@ -12,6 +12,7 @@ model User {
   email     String   @unique
   senha     String   @default("123456")
   nome      String?
+  foto      String?
   altura    Float?
   pesoAtual Float?
   createdAt DateTime @default(now())

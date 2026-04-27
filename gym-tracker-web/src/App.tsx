@@ -4,6 +4,16 @@ import { toBlob } from 'html-to-image';
 
 const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
+const getUserDisplayName = (user: any) => {
+  if (user?.nome?.trim()) return user.nome.trim();
+  return user?.email?.split('@')[0]?.replace('.', ' ') || 'Atleta';
+};
+
+const getUserInitials = (user: any) => {
+  const base = user?.nome?.trim() || user?.email || 'GT';
+  return base.substring(0, 2).toUpperCase();
+};
+
 // --- FUNÇÃO DE ALARME DO DESCANSO (NATIVA) ---
 const dispararAlarmeDescanso = () => {
   if ('vibrate' in navigator) {
@@ -83,15 +93,15 @@ function ReportModal({ sessionData, allExercises, user, onClose, onShare, onDele
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center border-2 border-gray-700 overflow-hidden shadow-lg shrink-0">
               {user?.foto ? (
-                <img src={user.foto} alt="Atleta" className="w-full h-full object-cover" />
+                <img src={user.foto} alt="Atleta" crossOrigin="anonymous" className="w-full h-full object-cover" />
               ) : (
-                <span className="text-sm font-black text-gray-400">{user?.email?.substring(0, 2).toUpperCase()}</span>
+                <span className="text-sm font-black text-gray-400">{getUserInitials(user)}</span>
               )}
             </div>
             <div className="text-left">
               <p className="text-[9px] text-gray-500 uppercase font-bold tracking-widest leading-none mb-1">Atleta</p>
               <p className="text-sm font-black text-white capitalize truncate max-w-[100px]">
-                {user?.email?.split('@')[0].replace('.', ' ')}
+                {getUserDisplayName(user)}
               </p>
             </div>
           </div>
@@ -197,6 +207,9 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
+  const [profileName, setProfileName] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [novoExNome, setNovoExNome] = useState('');
   const [novoExGrupo, setNovoExGrupo] = useState('Peito');
   const [novoPeso, setNovoPeso] = useState('');
@@ -222,6 +235,11 @@ export default function App() {
 
   useEffect(() => {
     if (user) fetchData();
+  }, [user]);
+
+  useEffect(() => {
+    setProfileName(user?.nome || '');
+    setProfilePhoto(user?.foto || '');
   }, [user]);
 
   useEffect(() => {
@@ -390,6 +408,37 @@ export default function App() {
       setNovaSenha('');
     } else {
       alert("Erro ao tentar atualizar a senha.");
+    }
+  };
+
+  const handleUpdateProfile = async (e: any) => {
+    e.preventDefault();
+    if (!user) return;
+
+    setIsSavingProfile(true);
+    try {
+      const res = await fetch(`${API_URL}/users/${user.id}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: profileName.trim() || null,
+          foto: profilePhoto.trim() || null
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setUser(data);
+        localStorage.setItem('@GymTracker:user', JSON.stringify(data));
+        alert("Perfil atualizado com sucesso!");
+      } else {
+        alert(data.error || "Erro ao atualizar perfil.");
+      }
+    } catch (e) {
+      alert("Erro ao atualizar perfil.");
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -958,11 +1007,42 @@ export default function App() {
         {activeTab === 'perfil' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
-              <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4">
-                <span className="text-2xl font-black text-gray-500">{user.email.substring(0, 2).toUpperCase()}</span>
+              <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4 overflow-hidden">
+                {user.foto ? (
+                  <img src={user.foto} alt="Foto de perfil" crossOrigin="anonymous" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-2xl font-black text-gray-500">{getUserInitials(user)}</span>
+                )}
               </div>
               <h2 className="text-xl font-bold mb-1">{user.email}</h2>
               <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
+
+              <form onSubmit={handleUpdateProfile} className="mb-8 space-y-3 bg-gray-900 p-4 rounded-2xl border border-gray-700 text-left">
+                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-2">Perfil</p>
+                <input
+                  type="text"
+                  placeholder="Nome de exibição"
+                  className="w-full bg-gray-800 p-4 rounded-xl border border-gray-700 outline-none text-sm focus:border-blue-500 transition-colors"
+                  value={profileName}
+                  onChange={e => setProfileName(e.target.value)}
+                />
+                <input
+                  type="url"
+                  placeholder="https://sua-foto.jpg"
+                  className="w-full bg-gray-800 p-4 rounded-xl border border-gray-700 outline-none text-sm focus:border-blue-500 transition-colors"
+                  value={profilePhoto}
+                  onChange={e => setProfilePhoto(e.target.value)}
+                />
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Use uma imagem pública com CORS liberado para aparecer no compartilhamento do relatório.
+                </p>
+                <button
+                  disabled={isSavingProfile}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-green-500/20"
+                >
+                  {isSavingProfile ? 'Salvando...' : 'Salvar Perfil'}
+                </button>
+              </form>
 
               {/* FORMULÁRIO DE TROCA DE SENHA */}
               <form onSubmit={handleMudarSenha} className="mb-8 space-y-3 bg-gray-900 p-4 rounded-2xl border border-gray-700 text-left">
