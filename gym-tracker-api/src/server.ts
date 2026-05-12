@@ -5,6 +5,9 @@ import bcrypt from 'bcrypt';
 
 const app = express();
 const prisma = new PrismaClient();
+const BCRYPT_ROUNDS = 10;
+
+const isBcryptHash = (value: string) => /^\$2[aby]\$\d{2}\$/.test(value);
 
 app.use(cors()); // Permite conexões do front-end
 app.use(express.json());
@@ -15,7 +18,7 @@ app.post('/register', async (req, res) => {
 
     try {
         // Criptografa a senha antes de salvar
-        const hashSenha = await bcrypt.hash(senha, 10);
+        const hashSenha = await bcrypt.hash(senha, BCRYPT_ROUNDS);
 
         const user = await prisma.user.create({
             data: {
@@ -44,10 +47,20 @@ app.post('/login', async (req, res) => {
             return res.status(404).json({ error: 'Usuário não encontrado.' });
         }
 
-        // Compara a senha digitada com o hash salvo no banco
-        const senhaValida = await bcrypt.compare(senha, user.senha);
+        // Compara a senha digitada com o hash salvo no banco.
+        // Se existir senha antiga em texto puro, migra para hash no login correto.
+        const senhaValida = isBcryptHash(user.senha)
+            ? await bcrypt.compare(senha, user.senha)
+            : senha === user.senha;
         if (!senhaValida) {
             return res.status(401).json({ error: 'Senha incorreta.' });
+        }
+
+        if (!isBcryptHash(user.senha)) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { senha: await bcrypt.hash(senha, BCRYPT_ROUNDS) }
+            });
         }
 
         res.json({ id: user.id, nome: user.nome, email: user.email, foto: user.foto });
@@ -347,10 +360,15 @@ app.put('/users/:id/password', async (req, res) => {
     const { novaSenha } = req.body;
 
     try {
-        // Nota: Se o seu id no Prisma for Int, use Number(id). Se for String (uuid/cuid), deixe apenas id.
+        if (typeof novaSenha !== 'string' || novaSenha.trim().length < 6) {
+            return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+        }
+
+        const hashSenha = await bcrypt.hash(novaSenha, BCRYPT_ROUNDS);
+
         await prisma.user.update({
             where: { id: id },
-            data: { senha: novaSenha }
+            data: { senha: hashSenha }
         });
         res.json({ message: 'Senha atualizada com sucesso!' });
     } catch (error) {

@@ -9,6 +9,8 @@ const cors_1 = __importDefault(require("cors"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const app = (0, express_1.default)();
 const prisma = new client_1.PrismaClient();
+const BCRYPT_ROUNDS = 10;
+const isBcryptHash = (value) => /^\$2[aby]\$\d{2}\$/.test(value);
 app.use((0, cors_1.default)()); // Permite conexões do front-end
 app.use(express_1.default.json());
 // ROTA: Criar nova conta
@@ -16,7 +18,7 @@ app.post('/register', async (req, res) => {
     const { email, senha, nome, foto } = req.body;
     try {
         // Criptografa a senha antes de salvar
-        const hashSenha = await bcrypt_1.default.hash(senha, 10);
+        const hashSenha = await bcrypt_1.default.hash(senha, BCRYPT_ROUNDS);
         const user = await prisma.user.create({
             data: {
                 email,
@@ -41,10 +43,19 @@ app.post('/login', async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: 'Usuário não encontrado.' });
         }
-        // Compara a senha digitada com o hash salvo no banco
-        const senhaValida = await bcrypt_1.default.compare(senha, user.senha);
+        // Compara a senha digitada com o hash salvo no banco.
+        // Se existir senha antiga em texto puro, migra para hash no login correto.
+        const senhaValida = isBcryptHash(user.senha)
+            ? await bcrypt_1.default.compare(senha, user.senha)
+            : senha === user.senha;
         if (!senhaValida) {
             return res.status(401).json({ error: 'Senha incorreta.' });
+        }
+        if (!isBcryptHash(user.senha)) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { senha: await bcrypt_1.default.hash(senha, BCRYPT_ROUNDS) }
+            });
         }
         res.json({ id: user.id, nome: user.nome, email: user.email, foto: user.foto });
     }
@@ -337,10 +348,13 @@ app.put('/users/:id/password', async (req, res) => {
     const { id } = req.params;
     const { novaSenha } = req.body;
     try {
-        // Nota: Se o seu id no Prisma for Int, use Number(id). Se for String (uuid/cuid), deixe apenas id.
+        if (typeof novaSenha !== 'string' || novaSenha.trim().length < 6) {
+            return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+        }
+        const hashSenha = await bcrypt_1.default.hash(novaSenha, BCRYPT_ROUNDS);
         await prisma.user.update({
             where: { id: id },
-            data: { senha: novaSenha }
+            data: { senha: hashSenha }
         });
         res.json({ message: 'Senha atualizada com sucesso!' });
     }
