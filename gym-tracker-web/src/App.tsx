@@ -14,6 +14,78 @@ const getUserInitials = (user: any) => {
   return base.substring(0, 2).toUpperCase();
 };
 
+type Toast = {
+  id: number;
+  message: string;
+  type?: 'success' | 'error' | 'info';
+};
+
+type ConfirmState = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  tone?: 'default' | 'danger' | 'success';
+  resolve: (value: boolean) => void;
+} | null;
+
+function ToastStack({ toasts }: { toasts: Toast[] }) {
+  if (!toasts.length) return null;
+
+  const toneClass = {
+    success: 'border-green-500/40 bg-green-950/90 text-green-100',
+    error: 'border-red-500/40 bg-red-950/90 text-red-100',
+    info: 'border-blue-500/40 bg-gray-900/95 text-white'
+  };
+
+  return (
+    <div className="fixed top-4 left-0 right-0 z-[80] pointer-events-none px-4">
+      <div className="mx-auto flex w-full max-w-md flex-col gap-2">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`rounded-2xl border px-4 py-3 text-sm font-bold shadow-2xl backdrop-blur-md ${toneClass[toast.type || 'info']}`}
+          >
+            {toast.message}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDialog({ state, onClose }: { state: ConfirmState; onClose: (value: boolean) => void }) {
+  if (!state) return null;
+
+  const confirmClass = state.tone === 'danger'
+    ? 'bg-red-600 hover:bg-red-500 shadow-red-600/20'
+    : state.tone === 'success'
+      ? 'bg-green-600 hover:bg-green-500 shadow-green-600/20'
+      : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20';
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center">
+      <div className="w-full max-w-sm rounded-[1.75rem] border border-gray-700 bg-gray-900 p-6 text-white shadow-2xl">
+        <p className="text-lg font-black leading-tight">{state.title}</p>
+        <p className="mt-2 text-sm leading-relaxed text-gray-400">{state.message}</p>
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            onClick={() => onClose(false)}
+            className="rounded-2xl border border-gray-700 bg-gray-800 py-3 text-sm font-bold text-gray-300 transition-colors hover:text-white"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => onClose(true)}
+            className={`rounded-2xl py-3 text-sm font-black text-white shadow-lg transition-colors ${confirmClass}`}
+          >
+            {state.confirmLabel || 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- FUNÇÃO DE ALARME DO DESCANSO (NATIVA) ---
 const dispararAlarmeDescanso = () => {
   if ('vibrate' in navigator) {
@@ -202,6 +274,8 @@ export default function App() {
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [libTab, setLibTab] = useState<'global' | 'custom'>('global');
   const [isLogin, setIsLogin] = useState(true);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
 
   // Formulários
   const [email, setEmail] = useState('');
@@ -218,6 +292,25 @@ export default function App() {
   const [elapsedTime, setElapsedTime] = useState('00:00');
   const [restTime, setRestTime] = useState(0);
   const [restEndTime, setRestEndTime] = useState<number | null>(null);
+
+  const showToast = (message: string, type: Toast['type'] = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    window.setTimeout(() => {
+      setToasts(prev => prev.filter(toast => toast.id !== id));
+    }, 2800);
+  };
+
+  const askConfirm = (options: Omit<NonNullable<ConfirmState>, 'resolve'>) => {
+    return new Promise<boolean>(resolve => {
+      setConfirmState({ ...options, resolve });
+    });
+  };
+
+  const closeConfirm = (value: boolean) => {
+    confirmState?.resolve(value);
+    setConfirmState(null);
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem('@GymTracker:user');
@@ -391,7 +484,8 @@ export default function App() {
     if (res.ok) {
       setUser(data);
       localStorage.setItem('@GymTracker:user', JSON.stringify(data));
-    } else alert(data.error);
+      showToast(isLogin ? 'Bem-vindo de volta.' : 'Conta criada com sucesso.', 'success');
+    } else showToast(data.error || 'Não foi possível entrar.', 'error');
   };
   const handleMudarSenha = async (e: any) => {
     e.preventDefault();
@@ -404,10 +498,10 @@ export default function App() {
     });
 
     if (res.ok) {
-      alert("Senha atualizada com sucesso!");
+      showToast("Senha atualizada com sucesso.", 'success');
       setNovaSenha('');
     } else {
-      alert("Erro ao tentar atualizar a senha.");
+      showToast("Erro ao tentar atualizar a senha.", 'error');
     }
   };
 
@@ -431,12 +525,12 @@ export default function App() {
       if (res.ok) {
         setUser(data);
         localStorage.setItem('@GymTracker:user', JSON.stringify(data));
-        alert("Perfil atualizado com sucesso!");
+        showToast("Perfil atualizado com sucesso.", 'success');
       } else {
-        alert(data.error || "Erro ao atualizar perfil.");
+        showToast(data.error || "Erro ao atualizar perfil.", 'error');
       }
     } catch (e) {
-      alert("Erro ao atualizar perfil.");
+      showToast("Erro ao atualizar perfil.", 'error');
     } finally {
       setIsSavingProfile(false);
     }
@@ -454,6 +548,7 @@ export default function App() {
       setActiveSession(data);
       setCurrentLogs(data.logs.map((l: any) => ({ exerciseId: l.exerciseId, carga: l.carga, reps: l.repsFeitas || l.reps })));
       localStorage.setItem('@GymTracker:activeSession', JSON.stringify(data));
+      showToast(data.logs?.length ? 'Treino retomado.' : 'Treino iniciado.', 'success');
 
       try { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); ctx.resume(); } catch (e) { }
     }
@@ -462,7 +557,10 @@ export default function App() {
   const handleAddSerie = async (exId: number) => {
     const c = Number(cargas[exId]);
     const r = Number(repsSet[exId]);
-    if (!c || !r || !activeSession) return;
+    if (!c || !r || !activeSession) {
+      showToast('Informe carga e repetições para registrar a série.', 'info');
+      return;
+    }
 
     const res = await fetch(`${API_URL}/logs`, {
       method: 'POST',
@@ -496,11 +594,18 @@ export default function App() {
       //setCargas({ ...cargas, [exId]: '' });
       //setRepsSet({ ...repsSet, [exId]: '' });
       startRestTimer(60);
+      showToast('Série registrada.', 'success');
     }
   };
 
   const handleDeleteSerie = async (logId: number) => {
-    if (!confirm("Excluir esta série?")) return;
+    const confirmed = await askConfirm({
+      title: 'Excluir série?',
+      message: 'Esta série será removida do treino atual.',
+      confirmLabel: 'Excluir',
+      tone: 'danger'
+    });
+    if (!confirmed) return;
 
     // Apaga da tela na hora para não travar o seu treino
     const newLogs = currentLogs.filter(l => l.id !== logId);
@@ -512,10 +617,17 @@ export default function App() {
 
     // Manda a ordem silenciosa para a API apagar no banco
     await fetch(`${API_URL}/logs/${logId}`, { method: 'DELETE' });
+    showToast('Série excluída.', 'success');
   };
 
   const handleEndWorkout = async () => {
-    if (!confirm("Finalizar sessão e salvar progresso?")) return;
+    const confirmed = await askConfirm({
+      title: 'Finalizar treino?',
+      message: 'O treino será salvo no histórico e o relatório ficará pronto para compartilhar.',
+      confirmLabel: 'Finalizar',
+      tone: 'success'
+    });
+    if (!confirmed) return;
     const res = await fetch(`${API_URL}/sessions/end`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -532,12 +644,19 @@ export default function App() {
 
       fetchData();
       setSelectedReport(sessionFinalizada);
+      showToast('Treino finalizado.', 'success');
     }
   };
 
   // --- NOVA FUNÇÃO: CANCELAR TREINO ---
   const handleCancelWorkout = async () => {
-    if (!confirm("Tem certeza que deseja cancelar? Nenhuma série será salva.")) return;
+    const confirmed = await askConfirm({
+      title: 'Cancelar treino?',
+      message: 'A sessão atual será descartada e as séries deste treino não serão mantidas.',
+      confirmLabel: 'Cancelar treino',
+      tone: 'danger'
+    });
+    if (!confirmed) return;
 
     // Deleta a sessão diretamente do banco de dados
     const res = await fetch(`${API_URL}/sessions/${activeSession.id}`, { method: 'DELETE' });
@@ -548,6 +667,7 @@ export default function App() {
       stopRestTimer();
       localStorage.removeItem('@GymTracker:activeSession');
       fetchData(); // Recarrega gráficos limpos
+      showToast('Treino cancelado.', 'info');
     }
   };
 
@@ -561,13 +681,21 @@ export default function App() {
     if (res.ok) {
       fetchData();
       setIsLibraryOpen(false);
+      showToast(`Exercício adicionado à Ficha ${ficha}.`, 'success');
     }
   };
 
   const handleRemoveFromPlan = async (id: number) => {
-    if (!confirm("Remover da ficha?")) return;
+    const confirmed = await askConfirm({
+      title: 'Remover exercício?',
+      message: 'Ele sairá desta ficha, mas o histórico de treinos será preservado.',
+      confirmLabel: 'Remover',
+      tone: 'danger'
+    });
+    if (!confirmed) return;
     await fetch(`${API_URL}/plans/${id}`, { method: 'DELETE' });
     fetchData();
+    showToast('Exercício removido da ficha.', 'success');
   };
 
   const handleUpdateSeries = async (id: number, seriesAlvo: number) => {
@@ -594,15 +722,24 @@ export default function App() {
     if (res.ok) {
       fetchData();
       setNovoExNome('');
-      alert("Exercício criado!");
+      showToast("Exercício criado.", 'success');
     }
   };
 
   const handleDeleteCustomExercise = async (id: number) => {
-    if (!confirm("Excluir este exercício permanentemente?")) return;
+    const confirmed = await askConfirm({
+      title: 'Excluir exercício?',
+      message: 'A exclusão é permanente para exercícios criados por você.',
+      confirmLabel: 'Excluir',
+      tone: 'danger'
+    });
+    if (!confirmed) return;
     const res = await fetch(`${API_URL}/exercises/${id}/${user.id}`, { method: 'DELETE' });
-    if (res.ok) fetchData();
-    else alert("Você só pode excluir exercícios que você mesmo criou.");
+    if (res.ok) {
+      fetchData();
+      showToast('Exercício excluído.', 'success');
+    }
+    else showToast("Você só pode excluir exercícios que você mesmo criou.", 'error');
   };
 
   const handleRegistrarPeso = async (e: any) => {
@@ -616,6 +753,7 @@ export default function App() {
     if (res.ok) {
       fetchData();
       setNovoPeso('');
+      showToast('Peso registrado.', 'success');
     }
   };
 
@@ -640,25 +778,26 @@ export default function App() {
     if (navigator.share) {
       navigator.share({ files: [file], title: 'Meu Treino' });
     } else {
-      alert("Navegador não suporta compartilhamento direto.");
+      showToast("Navegador não suporta compartilhamento direto.", 'error');
     }
   };
 
   // --- TELA DE LOGIN ---
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col justify-center p-4 text-white">
-        <div className="max-w-md mx-auto w-full bg-gray-800 p-8 rounded-3xl border border-gray-700 shadow-2xl">
+      <div className="min-h-screen bg-gray-950 flex flex-col justify-center p-4 text-white">
+        <ToastStack toasts={toasts} />
+        <div className="max-w-md mx-auto w-full bg-gray-900 p-8 rounded-[1.75rem] border border-gray-800 shadow-2xl">
           <div className="flex flex-col items-center justify-center mb-8">
             <img src="/logo.png" alt="GymTracker Logo" className="w-20 h-20 mb-4 rounded-2xl shadow-lg" onError={(e) => e.currentTarget.style.display = 'none'} />
             <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
-            <p className="text-gray-400 text-sm mt-2">O seu treino, no seu controle.</p>
+            <p className="text-gray-400 text-sm mt-2">{isLogin ? 'Continue seu treino de onde parou.' : 'Crie sua conta para acompanhar evolução.'}</p>
           </div>
 
           <form onSubmit={handleAuth} className="space-y-4">
-            <input type="email" placeholder="E-mail" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={email} onChange={e => setEmail(e.target.value)} />
-            <input type="password" placeholder="Senha" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={senha} onChange={e => setSenha(e.target.value)} />
-            <button className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-xl font-bold uppercase transition-colors">{isLogin ? 'Entrar' : 'Cadastrar'}</button>
+            <input type="email" placeholder="E-mail" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={email} onChange={e => setEmail(e.target.value)} />
+            <input type="password" placeholder="Senha" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={senha} onChange={e => setSenha(e.target.value)} />
+            <button className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-600/20">{isLogin ? 'Entrar' : 'Cadastrar'}</button>
           </form>
           <button onClick={() => setIsLogin(!isLogin)} className="w-full mt-6 text-gray-400 text-sm hover:text-white transition-colors">{isLogin ? 'Criar nova conta' : 'Já tenho conta'}</button>
         </div>
@@ -668,16 +807,31 @@ export default function App() {
 
   const exerciciosAtuais = myPlans.filter(p => p.ficha === fichaAtiva).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   const customExercises = library.filter(ex => ex.userId === user.id);
+  const totalSeriesPlanejadas = exerciciosAtuais.reduce((acc, plan) => acc + (plan.seriesAlvo || 3), 0);
+  const totalSeriesFeitas = currentLogs.length;
+  const navItems = [
+    { id: 'treinar', label: 'Treinar', mark: 'T' },
+    { id: 'fichas', label: 'Fichas', mark: 'F' },
+    { id: 'evolucao', label: 'Evolução', mark: 'E' },
+    { id: 'perfil', label: 'Perfil', mark: 'P' }
+  ] as const;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white pb-28 font-sans">
-      <header className="p-6 flex justify-between items-center max-w-md mx-auto border-b border-gray-900">
+      <ToastStack toasts={toasts} />
+      <ConfirmDialog state={confirmState} onClose={closeConfirm} />
+      <header className="sticky top-0 z-30 border-b border-gray-900/80 bg-gray-950/90 px-5 py-4 backdrop-blur-md">
+        <div className="mx-auto flex max-w-md justify-between items-center">
         <div className="flex items-center gap-3">
           <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-md" onError={(e) => e.currentTarget.style.display = 'none'} />
           <h1 className="text-xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-400">Olá, {user.email.split('@')[0]}</span>
+          <span className="max-w-[130px] truncate text-right text-xs font-bold text-gray-400">Olá, {getUserDisplayName(user)}</span>
+          <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-gray-700 bg-gray-900 text-[10px] font-black text-gray-400">
+            {user.foto ? <img src={user.foto} alt="" className="h-full w-full object-cover" /> : getUserInitials(user)}
+          </div>
+        </div>
         </div>
       </header>
 
@@ -688,18 +842,33 @@ export default function App() {
           <div className="space-y-6 animate-in slide-in-from-bottom">
 
             {!activeSession ? (
-              <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg">
-                <h2 className="text-xl font-black mb-4 text-center">Qual o alvo de hoje?</h2>
+              <div className="space-y-5">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-blue-400">Treino</p>
+                  <h2 className="mt-1 text-2xl font-black">Qual o alvo de hoje?</h2>
+                  <p className="mt-1 text-sm text-gray-500">{exerciciosAtuais.length} exercícios programados na Ficha {fichaAtiva}</p>
+                </div>
 
-                <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
+                <div className="flex gap-2 bg-gray-900 p-1 rounded-xl border border-gray-800">
                   {['A', 'B', 'C'].map(f => (
                     <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Ficha {f}</button>
                   ))}
                 </div>
 
-                <div className="space-y-2 mb-6 max-h-60 overflow-y-auto pr-2 scrollbar-hide">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Exercícios</p>
+                    <p className="mt-1 text-2xl font-black">{exerciciosAtuais.length}</p>
+                  </div>
+                  <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Séries alvo</p>
+                    <p className="mt-1 text-2xl font-black">{totalSeriesPlanejadas}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-2 scrollbar-hide">
                   {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
-                    <div key={p.id} className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-lg relative overflow-hidden transition-all flex justify-between items-center">
+                    <div key={p.id} className="bg-gray-900 p-4 rounded-2xl border border-gray-800 relative overflow-hidden transition-all flex justify-between items-center">
                       <div>
                         <p className="font-bold text-white">{p.exercise.nome}</p>
                         <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{p.exercise.grupoMuscular}</p>
@@ -722,7 +891,7 @@ export default function App() {
 
                     </div>
                   )) : (
-                    <div className="text-center py-6 border border-dashed border-gray-700 rounded-xl">
+                    <div className="text-center py-8 border border-dashed border-gray-700 rounded-2xl bg-gray-900/40">
                       <p className="text-gray-500 text-sm">Ficha {fichaAtiva} vazia.</p>
                       <button onClick={() => setActiveTab('fichas')} className="text-blue-500 text-xs font-bold mt-2 uppercase">Ir para Fichas</button>
                     </div>
@@ -749,6 +918,13 @@ export default function App() {
                     </div>
                     <div className="text-2xl font-black font-mono text-white tracking-widest">{elapsedTime}</div>
                   </div>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-900">
+                    <div
+                      className="h-full rounded-full bg-blue-500 transition-all"
+                      style={{ width: `${Math.min(100, totalSeriesPlanejadas ? (totalSeriesFeitas / totalSeriesPlanejadas) * 100 : 0)}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">{totalSeriesFeitas} de {totalSeriesPlanejadas} séries planejadas</p>
 
                   {restTime > 0 && (
                     <div className="mt-3 bg-blue-900/40 p-2 rounded-xl border border-blue-500/30 flex justify-between items-center animate-pulse">
@@ -893,11 +1069,14 @@ export default function App() {
           activeTab === 'fichas' && (
             <div className="space-y-6 animate-in slide-in-from-bottom">
               <div className="flex justify-between items-center mb-2">
-                <h2 className="text-xl font-bold">Configurar Fichas</h2>
-                <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-blue-500/30">+ EXERCÍCIO</button>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-blue-400">Biblioteca</p>
+                  <h2 className="text-2xl font-black">Configurar Fichas</h2>
+                </div>
+                <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-500">Adicionar</button>
               </div>
 
-              <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl">
+              <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl border border-gray-800">
                 {['A', 'B', 'C'].map(f => (
                   <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Ficha {f}</button>
                 ))}
@@ -905,8 +1084,8 @@ export default function App() {
 
               <div className="space-y-3">
                 {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
-                  <div key={p.id} className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-lg relative overflow-hidden transition-all flex justify-between items-center">
-                    <div className="flex items-start justify-between gap-4">
+                  <div key={p.id} className="bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg relative overflow-hidden transition-all">
+                    <div className="flex w-full items-center justify-between gap-4">
                       <div>
                         <p className="font-bold text-white">{p.exercise.nome}</p>
                         <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{p.exercise.grupoMuscular}</p>
@@ -927,8 +1106,9 @@ export default function App() {
                     </div>
                   </div>
                 )) : (
-                  <div className="text-center py-10 bg-gray-800/50 rounded-2xl border border-gray-800 border-dashed">
+                  <div className="text-center py-10 bg-gray-900/50 rounded-2xl border border-gray-800 border-dashed">
                     <p className="text-gray-500">Nenhum exercício na Ficha {fichaAtiva}.</p>
+                    <button onClick={() => setIsLibraryOpen(true)} className="mt-3 text-xs font-black uppercase tracking-wider text-blue-400">Adicionar exercício</button>
                   </div>
                 )}
               </div>
@@ -1182,9 +1362,17 @@ export default function App() {
           onClose={() => setSelectedReport(null)}
           onShare={shareReport}
           onDelete={async () => {
-            if (confirm("Excluir treino?")) {
+            const confirmed = await askConfirm({
+              title: 'Excluir treino?',
+              message: 'Este registro e suas séries serão removidos do histórico.',
+              confirmLabel: 'Excluir',
+              tone: 'danger'
+            });
+            if (confirmed) {
               await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
-              setSelectedReport(null); fetchData();
+              setSelectedReport(null);
+              fetchData();
+              showToast('Treino excluído.', 'success');
             }
           }}
         />
@@ -1192,11 +1380,22 @@ export default function App() {
       }
 
       {/* NAVEGAÇÃO BOTTOM */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 p-3 flex justify-around z-40 max-w-md mx-auto rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-        <button onClick={() => setActiveTab('treinar')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'treinar' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Treinar</button>
-        <button onClick={() => setActiveTab('fichas')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'fichas' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Fichas</button>
-        <button onClick={() => setActiveTab('evolucao')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'evolucao' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Evolução</button>
-        <button onClick={() => setActiveTab('perfil')} className={`p-3 rounded-2xl font-bold text-xs transition-colors flex-1 text-center ${activeTab === 'perfil' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Perfil</button>
+      <nav className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-md border-t border-gray-800 bg-gray-950/95 px-3 pb-4 pt-3 shadow-[0_-10px_40px_rgba(0,0,0,0.55)] backdrop-blur-md">
+        <div className="grid grid-cols-4 gap-2">
+          {navItems.map(item => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex min-h-14 flex-col items-center justify-center rounded-2xl text-[11px] font-black transition-colors ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}
+              >
+                <span className={`mb-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${isActive ? 'bg-white/15' : 'bg-gray-900'}`}>{item.mark}</span>
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
       </nav>
     </div >
   );
