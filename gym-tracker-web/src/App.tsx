@@ -311,6 +311,9 @@ export default function App() {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [dataError, setDataError] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isCheckingServer, setIsCheckingServer] = useState(false);
+  const [isServerWaking, setIsServerWaking] = useState(false);
+  const [serverStatus, setServerStatus] = useState<'idle' | 'online' | 'slow' | 'offline'>('idle');
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [isCancellingWorkout, setIsCancellingWorkout] = useState(false);
@@ -360,6 +363,41 @@ export default function App() {
     setConfirmState(null);
   };
 
+  const checkServerAwake = async (showSuccessToast = false) => {
+    setIsCheckingServer(true);
+    setServerStatus('idle');
+
+    const wakeTimer = window.setTimeout(() => {
+      setIsServerWaking(true);
+      setServerStatus('slow');
+    }, 1800);
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25000);
+
+    try {
+      const res = await fetch(`${API_URL}/ping`, {
+        cache: 'no-store',
+        signal: controller.signal
+      });
+
+      if (!res.ok) throw new Error('Ping falhou');
+
+      setServerStatus('online');
+      if (showSuccessToast) showToast('Servidor conectado.', 'success');
+      return true;
+    } catch (e) {
+      setServerStatus('offline');
+      showToast('Servidor indisponível no momento. Tente novamente em instantes.', 'error');
+      return false;
+    } finally {
+      window.clearTimeout(wakeTimer);
+      window.clearTimeout(timeout);
+      setIsCheckingServer(false);
+      setIsServerWaking(false);
+    }
+  };
+
   useEffect(() => {
     const saved = localStorage.getItem('@GymTracker:user');
     if (saved) setUser(JSON.parse(saved));
@@ -372,6 +410,8 @@ export default function App() {
         setCurrentLogs(parsedSession.logs.map((l: any) => ({ exerciseId: l.exerciseId, carga: l.carga, reps: l.repsFeitas || l.reps })));
       }
     }
+
+    checkServerAwake();
   }, []);
 
   useEffect(() => {
@@ -505,6 +545,10 @@ export default function App() {
     if (!user?.id) return;
     setIsLoadingData(true);
     setDataError('');
+    const wakeTimer = window.setTimeout(() => {
+      setIsServerWaking(true);
+      setServerStatus('slow');
+    }, 1800);
     try {
       const [libRes, planRes, weightRes, freqRes, volRes, lastRes] = await Promise.all([
         fetch(`${API_URL}/exercises/${user.id}`),
@@ -525,8 +569,11 @@ export default function App() {
       }
     } catch (e) {
       console.error("Erro ao carregar dados");
-      setDataError('Não foi possível carregar seus dados agora.');
+      setServerStatus('offline');
+      setDataError('Não foi possível carregar seus dados agora. O servidor pode estar acordando ou indisponível.');
     } finally {
+      window.clearTimeout(wakeTimer);
+      setIsServerWaking(false);
       setIsLoadingData(false);
     }
   };
@@ -536,6 +583,10 @@ export default function App() {
     if (isAuthLoading) return;
     const route = isLogin ? '/login' : '/register';
     setIsAuthLoading(true);
+    const wakeTimer = window.setTimeout(() => {
+      setIsServerWaking(true);
+      setServerStatus('slow');
+    }, 1800);
     try {
       const res = await fetch(`${API_URL}${route}`, {
         method: 'POST',
@@ -549,8 +600,11 @@ export default function App() {
         showToast(isLogin ? 'Bem-vindo de volta.' : 'Conta criada com sucesso.', 'success');
       } else showToast(data.error || 'Não foi possível entrar.', 'error');
     } catch (e) {
-      showToast('Não foi possível conectar à API.', 'error');
+      setServerStatus('offline');
+      showToast('Não foi possível conectar à API. Se o Render estiver acordando, tente novamente em alguns segundos.', 'error');
     } finally {
+      window.clearTimeout(wakeTimer);
+      setIsServerWaking(false);
       setIsAuthLoading(false);
     }
   };
@@ -989,12 +1043,39 @@ export default function App() {
             <p className="text-gray-400 text-sm mt-2">{isLogin ? 'Continue seu treino de onde parou.' : 'Crie sua conta para acompanhar evolução.'}</p>
           </div>
 
+          {(isCheckingServer || isServerWaking || serverStatus === 'offline') && (
+            <div className={`mb-5 rounded-2xl border p-4 text-sm ${serverStatus === 'offline' ? 'border-red-500/30 bg-red-950/30 text-red-100' : 'border-blue-500/30 bg-blue-950/20 text-blue-100'}`}>
+              <div className="flex items-start gap-3">
+                {(isCheckingServer || isServerWaking) && <LoadingIcon size={16} />}
+                <div className="flex-1">
+                  <p className="font-bold">
+                    {serverStatus === 'offline'
+                      ? 'Servidor indisponível'
+                      : isServerWaking
+                        ? 'Acordando o servidor'
+                        : 'Conectando ao servidor'}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed opacity-80">
+                    {serverStatus === 'offline'
+                      ? 'O Render pode estar reiniciando. Aguarde um pouco e tente novamente.'
+                      : 'No Render gratuito, a primeira resposta pode levar alguns segundos.'}
+                  </p>
+                </div>
+                {serverStatus === 'offline' && (
+                  <button onClick={() => checkServerAwake(true)} disabled={isCheckingServer} className="text-xs font-black uppercase tracking-wider disabled:opacity-50">
+                    Tentar
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleAuth} className="space-y-4">
             <input disabled={isAuthLoading} type="email" placeholder="E-mail" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors disabled:opacity-60" value={email} onChange={e => setEmail(e.target.value)} />
             <input disabled={isAuthLoading} type="password" placeholder="Senha" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors disabled:opacity-60" value={senha} onChange={e => setSenha(e.target.value)} />
             <button disabled={isAuthLoading} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
               {isAuthLoading && <LoadingIcon size={17} />}
-              {isAuthLoading ? (isLogin ? 'Entrando...' : 'Cadastrando...') : (isLogin ? 'Entrar' : 'Cadastrar')}
+              {isAuthLoading ? (isServerWaking ? 'Acordando servidor...' : isLogin ? 'Entrando...' : 'Cadastrando...') : (isLogin ? 'Entrar' : 'Cadastrar')}
             </button>
           </form>
           <button disabled={isAuthLoading} onClick={() => setIsLogin(!isLogin)} className="w-full mt-6 text-gray-400 text-sm hover:text-white transition-colors disabled:opacity-50">{isLogin ? 'Criar nova conta' : 'Já tenho conta'}</button>
@@ -1078,16 +1159,16 @@ export default function App() {
           <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-950/30 p-4 text-sm text-red-100">
             <div className="flex items-start justify-between gap-3">
               <p>{dataError}</p>
-              <button onClick={fetchData} disabled={isLoadingData} className="shrink-0 text-xs font-black uppercase tracking-wider text-red-200 disabled:opacity-50">
+              <button onClick={() => { checkServerAwake(); fetchData(); }} disabled={isLoadingData || isCheckingServer} className="shrink-0 text-xs font-black uppercase tracking-wider text-red-200 disabled:opacity-50">
                 {isLoadingData ? 'Atualizando' : 'Tentar'}
               </button>
             </div>
           </div>
         )}
-        {isLoadingData && !dataError && (
+        {(isLoadingData || isServerWaking) && !dataError && (
           <div className="mb-4 flex items-center justify-center gap-2 rounded-2xl border border-gray-800 bg-gray-900/70 p-3 text-xs font-bold uppercase tracking-widest text-gray-400">
             <LoadingIcon size={14} />
-            Atualizando dados
+            {isServerWaking ? 'Acordando servidor do Render' : 'Atualizando dados'}
           </div>
         )}
 
