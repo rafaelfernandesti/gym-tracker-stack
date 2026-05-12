@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardList,
   KeyRound,
+  LoaderCircle,
   LogOut,
   Plus,
   Save,
@@ -100,6 +101,10 @@ function ConfirmDialog({ state, onClose }: { state: ConfirmState; onClose: (valu
   );
 }
 
+function LoadingIcon({ size = 16 }: { size?: number }) {
+  return <LoaderCircle size={size} className="animate-spin" />;
+}
+
 // --- FUNÇÃO DE ALARME DO DESCANSO (NATIVA) ---
 const dispararAlarmeDescanso = () => {
   if ('vibrate' in navigator) {
@@ -129,7 +134,7 @@ const dispararAlarmeDescanso = () => {
 };
 
 // --- COMPONENTE DO RELATÓRIO PRINTÁVEL ---
-function ReportModal({ sessionData, allExercises, user, onClose, onShare, onDelete }: any) {
+function ReportModal({ sessionData, allExercises, user, onClose, onShare, onDelete, isSharing }: any) {
   const reportRef = useRef<HTMLDivElement>(null);
   if (!sessionData) return null;
 
@@ -257,9 +262,9 @@ function ReportModal({ sessionData, allExercises, user, onClose, onShare, onDele
           <X size={16} />
           FECHAR
         </button>
-        <button onClick={onShare} className="flex-1 bg-blue-600 shadow-lg shadow-blue-600/30 py-4 rounded-2xl font-black tracking-wider hover:bg-blue-500 transition-colors flex items-center justify-center gap-2">
-          <Share2 size={16} />
-          COMPARTILHAR
+        <button disabled={isSharing} onClick={onShare} className="flex-1 bg-blue-600 shadow-lg shadow-blue-600/30 py-4 rounded-2xl font-black tracking-wider hover:bg-blue-500 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+          {isSharing ? <LoadingIcon size={16} /> : <Share2 size={16} />}
+          {isSharing ? 'GERANDO...' : 'COMPARTILHAR'}
         </button>
       </div>
       <button onClick={onDelete} className="mt-6 text-red-500/70 text-xs font-bold uppercase hover:text-red-400 transition-colors underline underline-offset-4 flex items-center gap-2">
@@ -291,7 +296,7 @@ export default function App() {
   // UX de Treino Ativo 
   const [cargas, setCargas] = useState<Record<number, string>>({});
   const [repsSet, setRepsSet] = useState<Record<number, string>>({});
-  const [currentLogs, setCurrentLogs] = useState<{ id?: number, exerciseId: number, carga: number, reps: number }[]>([]);
+  const [currentLogs, setCurrentLogs] = useState<{ id?: number | string, exerciseId: number, carga: number, reps: number }[]>([]);
 
   // UI Modais e Login
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -299,6 +304,22 @@ export default function App() {
   const [isLogin, setIsLogin] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [dataError, setDataError] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isStartingWorkout, setIsStartingWorkout] = useState(false);
+  const [isEndingWorkout, setIsEndingWorkout] = useState(false);
+  const [isCancellingWorkout, setIsCancellingWorkout] = useState(false);
+  const [addingSeries, setAddingSeries] = useState<Record<number, boolean>>({});
+  const [deletingSeries, setDeletingSeries] = useState<Record<string, boolean>>({});
+  const [mutatingPlans, setMutatingPlans] = useState<Record<number, boolean>>({});
+  const [addingPlanKey, setAddingPlanKey] = useState('');
+  const [isCreatingExercise, setIsCreatingExercise] = useState(false);
+  const [deletingExerciseId, setDeletingExerciseId] = useState<number | null>(null);
+  const [isSavingWeight, setIsSavingWeight] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [reportLoadingDate, setReportLoadingDate] = useState('');
+  const [isSharingReport, setIsSharingReport] = useState(false);
 
   // Formulários
   const [email, setEmail] = useState('');
@@ -477,6 +498,9 @@ export default function App() {
   };
 
   const fetchData = async () => {
+    if (!user?.id) return;
+    setIsLoadingData(true);
+    setDataError('');
     try {
       const [libRes, planRes, weightRes, freqRes, volRes, lastRes] = await Promise.all([
         fetch(`${API_URL}/exercises/${user.id}`),
@@ -492,39 +516,62 @@ export default function App() {
       if (freqRes.ok) setFrequency(await freqRes.json());
       if (volRes.ok) setVolumeHistory(await volRes.json());
       if (lastRes.ok) setLastLogs(await lastRes.json());
-    } catch (e) { console.error("Erro ao carregar dados"); }
+      if (![libRes, planRes, weightRes, freqRes, volRes, lastRes].every(res => res.ok)) {
+        setDataError('Alguns dados não carregaram. Tente atualizar.');
+      }
+    } catch (e) {
+      console.error("Erro ao carregar dados");
+      setDataError('Não foi possível carregar seus dados agora.');
+    } finally {
+      setIsLoadingData(false);
+    }
   };
 
   const handleAuth = async (e: any) => {
     e.preventDefault();
+    if (isAuthLoading) return;
     const route = isLogin ? '/login' : '/register';
-    const res = await fetch(`${API_URL}${route}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, senha })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setUser(data);
-      localStorage.setItem('@GymTracker:user', JSON.stringify(data));
-      showToast(isLogin ? 'Bem-vindo de volta.' : 'Conta criada com sucesso.', 'success');
-    } else showToast(data.error || 'Não foi possível entrar.', 'error');
+    setIsAuthLoading(true);
+    try {
+      const res = await fetch(`${API_URL}${route}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, senha })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUser(data);
+        localStorage.setItem('@GymTracker:user', JSON.stringify(data));
+        showToast(isLogin ? 'Bem-vindo de volta.' : 'Conta criada com sucesso.', 'success');
+      } else showToast(data.error || 'Não foi possível entrar.', 'error');
+    } catch (e) {
+      showToast('Não foi possível conectar à API.', 'error');
+    } finally {
+      setIsAuthLoading(false);
+    }
   };
   const handleMudarSenha = async (e: any) => {
     e.preventDefault();
-    if (!novaSenha) return;
+    if (!novaSenha || isChangingPassword) return;
 
-    const res = await fetch(`${API_URL}/users/${user.id}/password`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ novaSenha })
-    });
+    setIsChangingPassword(true);
+    try {
+      const res = await fetch(`${API_URL}/users/${user.id}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ novaSenha })
+      });
 
-    if (res.ok) {
-      showToast("Senha atualizada com sucesso.", 'success');
-      setNovaSenha('');
-    } else {
+      if (res.ok) {
+        showToast("Senha atualizada com sucesso.", 'success');
+        setNovaSenha('');
+      } else {
+        showToast("Erro ao tentar atualizar a senha.", 'error');
+      }
+    } catch (e) {
       showToast("Erro ao tentar atualizar a senha.", 'error');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -560,20 +607,30 @@ export default function App() {
   };
 
   const handleStartWorkout = async () => {
-    const res = await fetch(`${API_URL}/sessions/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (!data.logs) data.logs = [];
-      setActiveSession(data);
-      setCurrentLogs(data.logs.map((l: any) => ({ exerciseId: l.exerciseId, carga: l.carga, reps: l.repsFeitas || l.reps })));
-      localStorage.setItem('@GymTracker:activeSession', JSON.stringify(data));
-      showToast(data.logs?.length ? 'Treino retomado.' : 'Treino iniciado.', 'success');
+    if (isStartingWorkout) return;
+    setIsStartingWorkout(true);
+    try {
+      const res = await fetch(`${API_URL}/sessions/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (!data.logs) data.logs = [];
+        setActiveSession(data);
+        setCurrentLogs(data.logs.map((l: any) => ({ id: l.id, exerciseId: l.exerciseId, carga: l.carga, reps: l.repsFeitas || l.reps })));
+        localStorage.setItem('@GymTracker:activeSession', JSON.stringify(data));
+        showToast(data.logs?.length ? 'Treino retomado.' : 'Treino iniciado.', 'success');
 
-      try { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); ctx.resume(); } catch (e) { }
+        try { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); ctx.resume(); } catch (e) { }
+      } else {
+        showToast('Não foi possível iniciar o treino.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível iniciar o treino.', 'error');
+    } finally {
+      setIsStartingWorkout(false);
     }
   };
 
@@ -584,44 +641,54 @@ export default function App() {
       showToast('Informe carga e repetições para registrar a série.', 'info');
       return;
     }
+    if (addingSeries[exId]) return;
 
-    const res = await fetch(`${API_URL}/logs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: user.id,
-        exerciseId: exId,
-        carga: c,
-        repsFeitas: r,
-        sessionId: activeSession.id
-      })
-    });
+    setAddingSeries(prev => ({ ...prev, [exId]: true }));
+    try {
+      const res = await fetch(`${API_URL}/logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          exerciseId: exId,
+          carga: c,
+          repsFeitas: r,
+          sessionId: activeSession.id
+        })
+      });
 
-    if (res.ok) {
-      const savedLog = await res.json(); // Pega o ID gerado pelo banco
+      if (res.ok) {
+        const savedLog = await res.json(); // Pega o ID gerado pelo banco
 
-      // Adiciona a série com o ID oficial do banco (ou um temporário por segurança)
-      const newLogs = [...currentLogs, {
-        id: savedLog.id || Date.now(),
-        exerciseId: exId,
-        carga: c,
-        reps: r
-      }];
+        // Adiciona a série com o ID oficial do banco (ou um temporário por segurança)
+        const newLogs = [...currentLogs, {
+          id: savedLog.id || Date.now(),
+          exerciseId: exId,
+          carga: c,
+          reps: r
+        }];
 
-      setCurrentLogs(newLogs);
+        setCurrentLogs(newLogs);
 
-      const updatedSession = { ...activeSession, logs: newLogs };
-      setActiveSession(updatedSession);
-      localStorage.setItem('@GymTracker:activeSession', JSON.stringify(updatedSession));
+        const updatedSession = { ...activeSession, logs: newLogs };
+        setActiveSession(updatedSession);
+        localStorage.setItem('@GymTracker:activeSession', JSON.stringify(updatedSession));
 
-      //setCargas({ ...cargas, [exId]: '' });
-      //setRepsSet({ ...repsSet, [exId]: '' });
-      startRestTimer(60);
-      showToast('Série registrada.', 'success');
+        //setCargas({ ...cargas, [exId]: '' });
+        //setRepsSet({ ...repsSet, [exId]: '' });
+        startRestTimer(60);
+        showToast('Série registrada.', 'success');
+      } else {
+        showToast('Não foi possível registrar a série.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível registrar a série.', 'error');
+    } finally {
+      setAddingSeries(prev => ({ ...prev, [exId]: false }));
     }
   };
 
-  const handleDeleteSerie = async (logId: number) => {
+  const handleDeleteSerie = async (logId: number | string) => {
     const confirmed = await askConfirm({
       title: 'Excluir série?',
       message: 'Esta série será removida do treino atual.',
@@ -629,6 +696,8 @@ export default function App() {
       tone: 'danger'
     });
     if (!confirmed) return;
+    const key = String(logId);
+    if (deletingSeries[key]) return;
 
     // Apaga da tela na hora para não travar o seu treino
     const newLogs = currentLogs.filter(l => l.id !== logId);
@@ -639,11 +708,20 @@ export default function App() {
     localStorage.setItem('@GymTracker:activeSession', JSON.stringify(updatedSession));
 
     // Manda a ordem silenciosa para a API apagar no banco
-    await fetch(`${API_URL}/logs/${logId}`, { method: 'DELETE' });
-    showToast('Série excluída.', 'success');
+    setDeletingSeries(prev => ({ ...prev, [key]: true }));
+    try {
+      const res = await fetch(`${API_URL}/logs/${logId}`, { method: 'DELETE' });
+      if (res.ok) showToast('Série excluída.', 'success');
+      else showToast('A série saiu da tela, mas a API não confirmou a exclusão.', 'error');
+    } catch (e) {
+      showToast('A série saiu da tela, mas a API não confirmou a exclusão.', 'error');
+    } finally {
+      setDeletingSeries(prev => ({ ...prev, [key]: false }));
+    }
   };
 
   const handleEndWorkout = async () => {
+    if (isEndingWorkout) return;
     const confirmed = await askConfirm({
       title: 'Finalizar treino?',
       message: 'O treino será salvo no histórico e o relatório ficará pronto para compartilhar.',
@@ -651,28 +729,38 @@ export default function App() {
       tone: 'success'
     });
     if (!confirmed) return;
-    const res = await fetch(`${API_URL}/sessions/end`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id })
-    });
-    if (res.ok) {
-      const sessionFinalizada = await res.json();
-      sessionFinalizada.logs = currentLogs;
+    setIsEndingWorkout(true);
+    try {
+      const res = await fetch(`${API_URL}/sessions/end`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id })
+      });
+      if (res.ok) {
+        const sessionFinalizada = await res.json();
+        sessionFinalizada.logs = currentLogs;
 
-      setActiveSession(null);
-      setCurrentLogs([]);
-      stopRestTimer();
-      localStorage.removeItem('@GymTracker:activeSession');
+        setActiveSession(null);
+        setCurrentLogs([]);
+        stopRestTimer();
+        localStorage.removeItem('@GymTracker:activeSession');
 
-      fetchData();
-      setSelectedReport(sessionFinalizada);
-      showToast('Treino finalizado.', 'success');
+        fetchData();
+        setSelectedReport(sessionFinalizada);
+        showToast('Treino finalizado.', 'success');
+      } else {
+        showToast('Não foi possível finalizar o treino.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível finalizar o treino.', 'error');
+    } finally {
+      setIsEndingWorkout(false);
     }
   };
 
   // --- NOVA FUNÇÃO: CANCELAR TREINO ---
   const handleCancelWorkout = async () => {
+    if (isCancellingWorkout) return;
     const confirmed = await askConfirm({
       title: 'Cancelar treino?',
       message: 'A sessão atual será descartada e as séries deste treino não serão mantidas.',
@@ -682,29 +770,49 @@ export default function App() {
     if (!confirmed) return;
 
     // Deleta a sessão diretamente do banco de dados
-    const res = await fetch(`${API_URL}/sessions/${activeSession.id}`, { method: 'DELETE' });
+    setIsCancellingWorkout(true);
+    try {
+      const res = await fetch(`${API_URL}/sessions/${activeSession.id}`, { method: 'DELETE' });
 
-    if (res.ok) {
-      setActiveSession(null);
-      setCurrentLogs([]);
-      stopRestTimer();
-      localStorage.removeItem('@GymTracker:activeSession');
-      fetchData(); // Recarrega gráficos limpos
-      showToast('Treino cancelado.', 'info');
+      if (res.ok) {
+        setActiveSession(null);
+        setCurrentLogs([]);
+        stopRestTimer();
+        localStorage.removeItem('@GymTracker:activeSession');
+        fetchData(); // Recarrega gráficos limpos
+        showToast('Treino cancelado.', 'info');
+      } else {
+        showToast('Não foi possível cancelar o treino.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível cancelar o treino.', 'error');
+    } finally {
+      setIsCancellingWorkout(false);
     }
   };
 
   // --- ROTINAS DE API ---
   const handleAddToPlan = async (exId: number, ficha: string) => {
-    const res = await fetch(`${API_URL}/plans`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, exerciseId: exId, ficha })
-    });
-    if (res.ok) {
-      fetchData();
-      setIsLibraryOpen(false);
-      showToast(`Exercício adicionado à Ficha ${ficha}.`, 'success');
+    const key = `${exId}-${ficha}`;
+    if (addingPlanKey) return;
+    setAddingPlanKey(key);
+    try {
+      const res = await fetch(`${API_URL}/plans`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, exerciseId: exId, ficha })
+      });
+      if (res.ok) {
+        await fetchData();
+        setIsLibraryOpen(false);
+        showToast(`Exercício adicionado à Ficha ${ficha}.`, 'success');
+      } else {
+        showToast('Não foi possível adicionar o exercício.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível adicionar o exercício.', 'error');
+    } finally {
+      setAddingPlanKey('');
     }
   };
 
@@ -716,12 +824,25 @@ export default function App() {
       tone: 'danger'
     });
     if (!confirmed) return;
-    await fetch(`${API_URL}/plans/${id}`, { method: 'DELETE' });
-    fetchData();
-    showToast('Exercício removido da ficha.', 'success');
+    setMutatingPlans(prev => ({ ...prev, [id]: true }));
+    try {
+      const res = await fetch(`${API_URL}/plans/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchData();
+        showToast('Exercício removido da ficha.', 'success');
+      } else {
+        showToast('Não foi possível remover o exercício.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível remover o exercício.', 'error');
+    } finally {
+      setMutatingPlans(prev => ({ ...prev, [id]: false }));
+    }
   };
 
   const handleUpdateSeries = async (id: number, seriesAlvo: number) => {
+    if (mutatingPlans[id]) return;
+    setMutatingPlans(prev => ({ ...prev, [id]: true }));
     try {
       const res = await fetch(`${API_URL}/plans/${id}`, {
         method: 'PUT',
@@ -729,23 +850,36 @@ export default function App() {
         body: JSON.stringify({ seriesAlvo })
       });
       if (res.ok) fetchData(); // Atualiza a tela automaticamente
+      else showToast('Não foi possível atualizar as séries.', 'error');
     } catch (e) {
       console.error(e);
+      showToast('Não foi possível atualizar as séries.', 'error');
+    } finally {
+      setMutatingPlans(prev => ({ ...prev, [id]: false }));
     }
   };
 
   const handleCreateCustomExercise = async (e: any) => {
     e.preventDefault();
-    if (!novoExNome) return;
-    const res = await fetch(`${API_URL}/exercises`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: novoExNome, grupoMuscular: novoExGrupo, userId: user.id })
-    });
-    if (res.ok) {
-      fetchData();
-      setNovoExNome('');
-      showToast("Exercício criado.", 'success');
+    if (!novoExNome || isCreatingExercise) return;
+    setIsCreatingExercise(true);
+    try {
+      const res = await fetch(`${API_URL}/exercises`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: novoExNome, grupoMuscular: novoExGrupo, userId: user.id })
+      });
+      if (res.ok) {
+        await fetchData();
+        setNovoExNome('');
+        showToast("Exercício criado.", 'success');
+      } else {
+        showToast("Não foi possível criar o exercício.", 'error');
+      }
+    } catch (e) {
+      showToast("Não foi possível criar o exercício.", 'error');
+    } finally {
+      setIsCreatingExercise(false);
     }
   };
 
@@ -757,51 +891,85 @@ export default function App() {
       tone: 'danger'
     });
     if (!confirmed) return;
-    const res = await fetch(`${API_URL}/exercises/${id}/${user.id}`, { method: 'DELETE' });
-    if (res.ok) {
-      fetchData();
-      showToast('Exercício excluído.', 'success');
+    setDeletingExerciseId(id);
+    try {
+      const res = await fetch(`${API_URL}/exercises/${id}/${user.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchData();
+        showToast('Exercício excluído.', 'success');
+      }
+      else showToast("Você só pode excluir exercícios que você mesmo criou.", 'error');
+    } catch (e) {
+      showToast("Não foi possível excluir o exercício.", 'error');
+    } finally {
+      setDeletingExerciseId(null);
     }
-    else showToast("Você só pode excluir exercícios que você mesmo criou.", 'error');
   };
 
   const handleRegistrarPeso = async (e: any) => {
     e.preventDefault();
-    if (!novoPeso) return;
-    const res = await fetch(`${API_URL}/weight`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, peso: Number(novoPeso) })
-    });
-    if (res.ok) {
-      fetchData();
-      setNovoPeso('');
-      showToast('Peso registrado.', 'success');
+    if (!novoPeso || isSavingWeight) return;
+    setIsSavingWeight(true);
+    try {
+      const res = await fetch(`${API_URL}/weight`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, peso: Number(novoPeso) })
+      });
+      if (res.ok) {
+        await fetchData();
+        setNovoPeso('');
+        showToast('Peso registrado.', 'success');
+      } else {
+        showToast('Não foi possível registrar o peso.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível registrar o peso.', 'error');
+    } finally {
+      setIsSavingWeight(false);
     }
   };
 
   const handleOpenReport = async (date: string) => {
-    const res = await fetch(`${API_URL}/reports/${user.id}/${date}`);
-    if (res.ok) {
-      const reports = await res.json();
-      if (reports.length === 1) {
-        setSelectedReport(reports[0]);
-      } else if (reports.length > 1) {
-        setDaySessions(reports);
+    if (reportLoadingDate) return;
+    setReportLoadingDate(date);
+    try {
+      const res = await fetch(`${API_URL}/reports/${user.id}/${date}`);
+      if (res.ok) {
+        const reports = await res.json();
+        if (reports.length === 1) {
+          setSelectedReport(reports[0]);
+        } else if (reports.length > 1) {
+          setDaySessions(reports);
+        }
+      } else {
+        showToast('Não foi possível abrir o relatório.', 'error');
       }
+    } catch (e) {
+      showToast('Não foi possível abrir o relatório.', 'error');
+    } finally {
+      setReportLoadingDate('');
     }
   };
 
   const shareReport = async () => {
     const node = document.getElementById('report-card');
     if (!node) return;
-    const blob = await toBlob(node, { pixelRatio: 2 });
-    if (!blob) return;
-    const file = new File([blob], 'treino.png', { type: 'image/png' });
-    if (navigator.share) {
-      navigator.share({ files: [file], title: 'Meu Treino' });
-    } else {
-      showToast("Navegador não suporta compartilhamento direto.", 'error');
+    if (isSharingReport) return;
+    setIsSharingReport(true);
+    try {
+      const blob = await toBlob(node, { pixelRatio: 2 });
+      if (!blob) return;
+      const file = new File([blob], 'treino.png', { type: 'image/png' });
+      if (navigator.share) {
+        await navigator.share({ files: [file], title: 'Meu Treino' });
+      } else {
+        showToast("Navegador não suporta compartilhamento direto.", 'error');
+      }
+    } catch (e) {
+      showToast("Não foi possível compartilhar o relatório.", 'error');
+    } finally {
+      setIsSharingReport(false);
     }
   };
 
@@ -818,11 +986,14 @@ export default function App() {
           </div>
 
           <form onSubmit={handleAuth} className="space-y-4">
-            <input type="email" placeholder="E-mail" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={email} onChange={e => setEmail(e.target.value)} />
-            <input type="password" placeholder="Senha" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors" value={senha} onChange={e => setSenha(e.target.value)} />
-            <button className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-600/20">{isLogin ? 'Entrar' : 'Cadastrar'}</button>
+            <input disabled={isAuthLoading} type="email" placeholder="E-mail" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors disabled:opacity-60" value={email} onChange={e => setEmail(e.target.value)} />
+            <input disabled={isAuthLoading} type="password" placeholder="Senha" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors disabled:opacity-60" value={senha} onChange={e => setSenha(e.target.value)} />
+            <button disabled={isAuthLoading} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              {isAuthLoading && <LoadingIcon size={17} />}
+              {isAuthLoading ? (isLogin ? 'Entrando...' : 'Cadastrando...') : (isLogin ? 'Entrar' : 'Cadastrar')}
+            </button>
           </form>
-          <button onClick={() => setIsLogin(!isLogin)} className="w-full mt-6 text-gray-400 text-sm hover:text-white transition-colors">{isLogin ? 'Criar nova conta' : 'Já tenho conta'}</button>
+          <button disabled={isAuthLoading} onClick={() => setIsLogin(!isLogin)} className="w-full mt-6 text-gray-400 text-sm hover:text-white transition-colors disabled:opacity-50">{isLogin ? 'Criar nova conta' : 'Já tenho conta'}</button>
         </div>
       </div>
     );
@@ -859,6 +1030,22 @@ export default function App() {
       </header>
 
       <main className="max-w-md mx-auto px-4 mt-6">
+        {dataError && (
+          <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-950/30 p-4 text-sm text-red-100">
+            <div className="flex items-start justify-between gap-3">
+              <p>{dataError}</p>
+              <button onClick={fetchData} disabled={isLoadingData} className="shrink-0 text-xs font-black uppercase tracking-wider text-red-200 disabled:opacity-50">
+                {isLoadingData ? 'Atualizando' : 'Tentar'}
+              </button>
+            </div>
+          </div>
+        )}
+        {isLoadingData && !dataError && (
+          <div className="mb-4 flex items-center justify-center gap-2 rounded-2xl border border-gray-800 bg-gray-900/70 p-3 text-xs font-bold uppercase tracking-widest text-gray-400">
+            <LoadingIcon size={14} />
+            Atualizando dados
+          </div>
+        )}
 
         {/* ABA TREINAR */}
         {activeTab === 'treinar' && (
@@ -904,13 +1091,14 @@ export default function App() {
                           <input
                             type="number"
                             min="1"
+                            disabled={!!mutatingPlans[p.id]}
                             className="w-12 bg-gray-900 text-center text-sm font-bold py-1 rounded-lg border border-gray-700 outline-none text-white focus:border-blue-500 transition-colors"
                             value={p.seriesAlvo || 3}
                             onChange={(e) => handleUpdateSeries(p.id, Number(e.target.value))}
                           />
                         </div>
-                        <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors" aria-label="Remover exercício">
-                          <Trash2 size={16} />
+                        <button disabled={!!mutatingPlans[p.id]} onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Remover exercício">
+                          {mutatingPlans[p.id] ? <LoadingIcon size={16} /> : <Trash2 size={16} />}
                         </button>
                       </div>
 
@@ -925,11 +1113,11 @@ export default function App() {
 
                 <button
                   onClick={handleStartWorkout}
-                  disabled={exerciciosAtuais.length === 0}
+                  disabled={exerciciosAtuais.length === 0 || isStartingWorkout || isLoadingData}
                   className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-xl font-black uppercase tracking-widest disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2"
                 >
-                  <BicepsFlexed size={18} />
-                  INICIAR TREINO
+                  {isStartingWorkout ? <LoadingIcon size={18} /> : <BicepsFlexed size={18} />}
+                  {isStartingWorkout ? 'INICIANDO...' : 'INICIAR TREINO'}
                 </button>
               </div>
 
@@ -1007,8 +1195,8 @@ export default function App() {
                                 <div>
                                   <span className="text-sm font-black text-white">{log.carga} <span className="text-gray-500 font-normal text-xs">kg ×</span> {log.reps} <span className="text-gray-500 font-normal text-xs">reps</span></span>
                                 </div>
-                                <button onClick={() => log.id && handleDeleteSerie(log.id)} className="text-red-500 hover:text-red-400 font-bold p-1 text-xs opacity-70 hover:opacity-100 transition-opacity" aria-label="Excluir série">
-                                  <Trash2 size={14} />
+                                <button disabled={!!log.id && !!deletingSeries[String(log.id)]} onClick={() => log.id && handleDeleteSerie(log.id)} className="text-red-500 hover:text-red-400 font-bold p-1 text-xs opacity-70 hover:opacity-100 transition-opacity disabled:cursor-not-allowed" aria-label="Excluir série">
+                                  {log.id && deletingSeries[String(log.id)] ? <LoadingIcon size={14} /> : <Trash2 size={14} />}
                                 </button>
                               </div>
                             </div>
@@ -1059,11 +1247,11 @@ export default function App() {
                         <div className="flex flex-col gap-3">
                           <button
                             onClick={() => handleAddSerie(p.exercise.id)}
-                            disabled={!cargas[p.exercise.id] || !repsSet[p.exercise.id]}
+                            disabled={!cargas[p.exercise.id] || !repsSet[p.exercise.id] || !!addingSeries[p.exercise.id]}
                             className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed py-3 rounded-xl font-black text-[11px] uppercase tracking-wider transition-colors flex items-center justify-center gap-2"
                           >
-                            <Plus size={15} />
-                            SÉRIE
+                            {addingSeries[p.exercise.id] ? <LoadingIcon size={15} /> : <Plus size={15} />}
+                            {addingSeries[p.exercise.id] ? 'SALVANDO...' : 'SÉRIE'}
                           </button>
 
                           {fantasma && (
@@ -1080,13 +1268,13 @@ export default function App() {
 
                 {/* BOTÕES DE AÇÃO DO TREINO */}
                 <div className="mt-8 space-y-3">
-                  <button onClick={handleEndWorkout} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-green-500/20 transition-all flex items-center justify-center gap-2">
-                    <CheckCircle2 size={18} />
-                    FINALIZAR TREINO
+                  <button disabled={isEndingWorkout || isCancellingWorkout} onClick={handleEndWorkout} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-green-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                    {isEndingWorkout ? <LoadingIcon size={18} /> : <CheckCircle2 size={18} />}
+                    {isEndingWorkout ? 'FINALIZANDO...' : 'FINALIZAR TREINO'}
                   </button>
-                  <button onClick={handleCancelWorkout} className="w-full py-4 rounded-2xl font-bold text-red-500/80 uppercase tracking-widest hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/30 text-xs flex items-center justify-center gap-2">
-                    <X size={15} />
-                    Cancelar Treino
+                  <button disabled={isEndingWorkout || isCancellingWorkout} onClick={handleCancelWorkout} className="w-full py-4 rounded-2xl font-bold text-red-500/80 uppercase tracking-widest hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/30 text-xs flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                    {isCancellingWorkout ? <LoadingIcon size={15} /> : <X size={15} />}
+                    {isCancellingWorkout ? 'Cancelando...' : 'Cancelar Treino'}
                   </button>
                 </div>
               </div>
@@ -1130,13 +1318,14 @@ export default function App() {
                           <input
                             type="number"
                             min="1"
+                            disabled={!!mutatingPlans[p.id]}
                             className="w-12 bg-gray-900 text-center text-sm font-bold py-1 rounded-lg border border-gray-700 outline-none text-white focus:border-blue-500 transition-colors"
                             value={p.seriesAlvo || 3}
                             onChange={(e) => handleUpdateSeries(p.id, Number(e.target.value))}
                           />
                         </div>
-                        <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors" aria-label="Remover exercício">
-                          <Trash2 size={16} />
+                        <button disabled={!!mutatingPlans[p.id]} onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Remover exercício">
+                          {mutatingPlans[p.id] ? <LoadingIcon size={16} /> : <Trash2 size={16} />}
                         </button>
                       </div>
                     </div>
@@ -1174,8 +1363,10 @@ export default function App() {
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
                 <form onSubmit={handleRegistrarPeso} className="flex gap-2">
-                  <input type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
-                  <button className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold">+</button>
+                  <input disabled={isSavingWeight} type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center disabled:opacity-60" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
+                  <button disabled={isSavingWeight || !novoPeso} className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isSavingWeight ? <LoadingIcon size={14} /> : '+'}
+                  </button>
                 </form>
               </div>
               <div className="flex-1 min-h-0">
@@ -1210,10 +1401,11 @@ export default function App() {
                   return (
                     <button
                       key={iso}
+                      disabled={!!reportLoadingDate}
                       onClick={() => treinou && handleOpenReport(iso)}
-                      className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
+                      className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all disabled:cursor-wait ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
                     >
-                      {dia}
+                      {reportLoadingDate === iso ? <LoadingIcon size={12} /> : dia}
                     </button>
                   );
                 })}
@@ -1259,7 +1451,7 @@ export default function App() {
                   disabled={isSavingProfile}
                   className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-green-500/20 flex items-center justify-center gap-2"
                 >
-                  <Save size={16} />
+                  {isSavingProfile ? <LoadingIcon size={16} /> : <Save size={16} />}
                   {isSavingProfile ? 'Salvando...' : 'Salvar Perfil'}
                 </button>
               </form>
@@ -1275,11 +1467,11 @@ export default function App() {
                   onChange={e => setNovaSenha(e.target.value)}
                 />
                 <button
-                  disabled={!novaSenha}
+                  disabled={!novaSenha || isChangingPassword}
                   className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
                 >
-                  <KeyRound size={16} />
-                  Atualizar Senha
+                  {isChangingPassword ? <LoadingIcon size={16} /> : <KeyRound size={16} />}
+                  {isChangingPassword ? 'Atualizando...' : 'Atualizar Senha'}
                 </button>
               </form>
 
@@ -1348,7 +1540,9 @@ export default function App() {
                           <span className="font-bold text-sm text-white">{ex.nome}</span>
                           <div className="flex gap-1">
                             {['A', 'B', 'C'].map(f => (
-                              <button key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors">+{f}</button>
+                              <button disabled={!!addingPlanKey} key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-wait">
+                                {addingPlanKey === `${ex.id}-${f}` ? <LoadingIcon size={12} /> : `+${f}`}
+                              </button>
                             ))}
                           </div>
                         </div>
@@ -1361,13 +1555,13 @@ export default function App() {
                   <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700">
                     <h3 className="text-lg font-bold mb-4">Novo Exercício</h3>
                     <form onSubmit={handleCreateCustomExercise} className="space-y-4">
-                      <input type="text" placeholder="Nome (Ex: Supino Declinado)" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExNome} onChange={e => setNovoExNome(e.target.value)} required />
-                      <select className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExGrupo} onChange={e => setNovoExGrupo(e.target.value)}>
+                      <input disabled={isCreatingExercise} type="text" placeholder="Nome (Ex: Supino Declinado)" className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none disabled:opacity-60" value={novoExNome} onChange={e => setNovoExNome(e.target.value)} required />
+                      <select disabled={isCreatingExercise} className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none disabled:opacity-60" value={novoExGrupo} onChange={e => setNovoExGrupo(e.target.value)}>
                         {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(g => <option key={g} value={g}>{g}</option>)}
                       </select>
-                      <button className="w-full bg-green-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2">
-                        <Save size={16} />
-                        SALVAR
+                      <button disabled={isCreatingExercise} className="w-full bg-green-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                        {isCreatingExercise ? <LoadingIcon size={16} /> : <Save size={16} />}
+                        {isCreatingExercise ? 'SALVANDO...' : 'SALVAR'}
                       </button>
                     </form>
                   </div>
@@ -1384,11 +1578,13 @@ export default function App() {
                             </div>
                             <div className="flex items-center gap-3">
                               {['A', 'B', 'C'].map(f => (
-                                <button key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-2 py-1 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors">+{f}</button>
+                                <button disabled={!!addingPlanKey || deletingExerciseId === ex.id} key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-2 py-1 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-wait">
+                                  {addingPlanKey === `${ex.id}-${f}` ? <LoadingIcon size={12} /> : `+${f}`}
+                                </button>
                               ))}
                               <div className="w-px h-6 bg-gray-700 mx-1"></div>
-                              <button onClick={() => handleDeleteCustomExercise(ex.id)} className="text-red-500 hover:text-red-400 p-1" aria-label="Excluir exercício">
-                                <Trash2 size={15} />
+                              <button disabled={deletingExerciseId === ex.id} onClick={() => handleDeleteCustomExercise(ex.id)} className="text-red-500 hover:text-red-400 p-1 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Excluir exercício">
+                                {deletingExerciseId === ex.id ? <LoadingIcon size={15} /> : <Trash2 size={15} />}
                               </button>
                             </div>
                           </div>
@@ -1408,6 +1604,7 @@ export default function App() {
           sessionData={selectedReport}
           allExercises={library}
           user={user} // <--- ADICIONE ESTA LINHA AQUI
+          isSharing={isSharingReport}
           onClose={() => setSelectedReport(null)}
           onShare={shareReport}
           onDelete={async () => {
