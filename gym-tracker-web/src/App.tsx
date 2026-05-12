@@ -3,9 +3,11 @@ import { LineChart, Line, BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } f
 import { toBlob } from 'html-to-image';
 import {
   BicepsFlexed,
+  CalendarCheck,
   ChartLine,
   CheckCircle2,
   ClipboardList,
+  Flame,
   KeyRound,
   LoaderCircle,
   LogOut,
@@ -13,6 +15,8 @@ import {
   Save,
   Share2,
   Trash2,
+  Trophy,
+  TrendingUp,
   UserRound,
   X
 } from 'lucide-react';
@@ -1009,6 +1013,46 @@ export default function App() {
     { id: 'evolucao', label: 'Evolução', Icon: ChartLine },
     { id: 'perfil', label: 'Perfil', Icon: UserRound }
   ] as const;
+  const volumeChartData = volumeHistory.map((v: any) => ({ ...v, d: new Date(v.data).getDate() }));
+  const weightChartData = weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }));
+  const totalVolume = volumeHistory.reduce((acc: number, item: any) => acc + Number(item.volume || 0), 0);
+  const bestVolume = volumeHistory.reduce((best: number, item: any) => Math.max(best, Number(item.volume || 0)), 0);
+  const lastVolume = Number(volumeHistory[volumeHistory.length - 1]?.volume || 0);
+  const previousVolume = Number(volumeHistory[volumeHistory.length - 2]?.volume || 0);
+  const volumeTrend = previousVolume ? Math.round(((lastVolume - previousVolume) / previousVolume) * 100) : 0;
+  const sortedFrequencyDates = [...frequency]
+    .map(date => new Date(date))
+    .filter(date => !Number.isNaN(date.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime());
+  const lastWorkoutDate = sortedFrequencyDates[0];
+  const lastWorkoutLabel = lastWorkoutDate
+    ? lastWorkoutDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+    : '--';
+  const frequencySet = new Set(sortedFrequencyDates.map(date => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }));
+  let currentStreak = 0;
+  for (let i = 0; i < 30; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (!frequencySet.has(key)) break;
+    currentStreak += 1;
+  }
+  const firstWeight = Number(weightHistory[0]?.peso || 0);
+  const latestWeight = Number(weightHistory[weightHistory.length - 1]?.peso || 0);
+  const weightDelta = firstWeight && latestWeight ? Number((latestWeight - firstWeight).toFixed(1)) : 0;
+  const topStrengthMarks = [...lastLogs]
+    .sort((a: any, b: any) => Number(b.carga || 0) - Number(a.carga || 0))
+    .slice(0, 3)
+    .map((log: any) => ({
+      ...log,
+      exerciseName: library.find(ex => ex.id === log.exerciseId)?.nome || 'Exercício'
+    }));
+  const hasEvolutionData = volumeHistory.length > 0 || weightHistory.length > 0 || frequency.length > 0 || lastLogs.length > 0;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white pb-28 font-sans">
@@ -1346,18 +1390,125 @@ export default function App() {
         {/* ABA EVOLUÇÃO */}
         {activeTab === 'evolucao' && (
           <div className="space-y-6 animate-in slide-in-from-bottom">
-            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-64 flex flex-col">
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Total de Carga (kg)</h3>
-              <div className="flex-1 min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={volumeHistory.map((v: any) => ({ ...v, d: new Date(v.data).getDate() }))}>
-                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
-                    <Bar dataKey="volume" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-400">Progresso</p>
+              <h2 className="mt-1 text-2xl font-black">Evolução</h2>
+              <p className="mt-1 text-sm text-gray-500">Seu panorama recente de consistência, volume e marcas.</p>
+            </div>
+
+            {!hasEvolutionData && (
+              <div className="rounded-2xl border border-dashed border-gray-700 bg-gray-900/50 p-8 text-center">
+                <Trophy className="mx-auto mb-3 text-gray-500" size={28} />
+                <p className="font-black text-white">Finalize seu primeiro treino</p>
+                <p className="mt-2 text-sm text-gray-500">Assim que houver histórico, esta tela mostra volume, frequência e melhores marcas.</p>
+                <button onClick={() => setActiveTab('treinar')} className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-xs font-black uppercase tracking-wider text-white">
+                  Ir para treino
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600/15 text-blue-400">
+                  <CalendarCheck size={18} />
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Treinos 30d</p>
+                <p className="mt-1 text-2xl font-black">{frequency.length}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-green-600/15 text-green-400">
+                  <Flame size={18} />
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Sequência</p>
+                <p className="mt-1 text-2xl font-black">{currentStreak} <span className="text-sm text-gray-500">dias</span></p>
+              </div>
+              <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-600/15 text-cyan-300">
+                  <TrendingUp size={18} />
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Volume total</p>
+                <p className="mt-1 text-2xl font-black">{Math.round(totalVolume).toLocaleString('pt-BR')}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600/15 text-violet-300">
+                  <Trophy size={18} />
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Último treino</p>
+                <p className="mt-1 text-2xl font-black">{lastWorkoutLabel}</p>
               </div>
             </div>
+
+            {(lastVolume > 0 || weightDelta !== 0 || bestVolume > 0) && (
+              <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+                <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Insights rápidos</h3>
+                <div className="mt-4 space-y-3">
+                  {lastVolume > 0 && (
+                    <div className="flex items-center justify-between gap-4 rounded-xl bg-gray-950 p-3">
+                      <span className="text-sm text-gray-300">Último volume registrado</span>
+                      <span className="font-black text-white">{Math.round(lastVolume).toLocaleString('pt-BR')} kg</span>
+                    </div>
+                  )}
+                  {previousVolume > 0 && (
+                    <div className="flex items-center justify-between gap-4 rounded-xl bg-gray-950 p-3">
+                      <span className="text-sm text-gray-300">Variação vs. treino anterior</span>
+                      <span className={`font-black ${volumeTrend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {volumeTrend >= 0 ? '+' : ''}{volumeTrend}%
+                      </span>
+                    </div>
+                  )}
+                  {weightHistory.length > 1 && (
+                    <div className="flex items-center justify-between gap-4 rounded-xl bg-gray-950 p-3">
+                      <span className="text-sm text-gray-300">Mudança de peso</span>
+                      <span className={`font-black ${weightDelta <= 0 ? 'text-green-400' : 'text-blue-400'}`}>
+                        {weightDelta > 0 ? '+' : ''}{weightDelta} kg
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-64 flex flex-col">
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Volume Total de Carga (kg)</h3>
+              {volumeChartData.length > 0 ? (
+                <div className="flex-1 min-h-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={volumeChartData}>
+                      <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                      <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                      <Bar dataKey="volume" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-gray-700 text-center text-sm text-gray-500">
+                  Finalize treinos para ver seu volume.
+                </div>
+              )}
+            </div>
+
+            {topStrengthMarks.length > 0 && (
+              <div className="rounded-3xl border border-gray-700 bg-gray-800 p-6 shadow-lg">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400">Melhores cargas recentes</h3>
+                  <Trophy size={18} className="text-yellow-400" />
+                </div>
+                <div className="space-y-3">
+                  {topStrengthMarks.map((mark: any, idx: number) => (
+                    <div key={`${mark.exerciseId}-${idx}`} className="flex items-center justify-between rounded-2xl border border-gray-700 bg-gray-900 p-4">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600/15 text-xs font-black text-blue-400">{idx + 1}</span>
+                        <div>
+                          <p className="text-sm font-black text-white">{mark.exerciseName}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{mark.repsFeitas} reps</p>
+                        </div>
+                      </div>
+                      <p className="text-lg font-black text-white">{mark.carga}<span className="text-xs text-gray-500"> kg</span></p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg h-80 flex flex-col">
               <div className="flex justify-between items-center mb-6">
@@ -1369,15 +1520,21 @@ export default function App() {
                   </button>
                 </form>
               </div>
-              <div className="flex-1 min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={weightHistory.map((w: any) => ({ ...w, d: new Date(w.data).getDate() }))}>
-                    <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
-                    <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              {weightChartData.length > 0 ? (
+                <div className="flex-1 min-h-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={weightChartData}>
+                      <XAxis dataKey="d" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', color: '#fff' }} />
+                      <Line type="monotone" dataKey="peso" stroke="#10B981" strokeWidth={4} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#1F2937' }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-gray-700 text-center text-sm text-gray-500">
+                  Registre seu peso para acompanhar a curva.
+                </div>
+              )}
             </div>
 
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg mb-8">
