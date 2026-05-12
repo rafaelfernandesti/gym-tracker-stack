@@ -1,6 +1,20 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { toBlob } from 'html-to-image';
+import {
+  BicepsFlexed,
+  ChartLine,
+  CheckCircle2,
+  ClipboardList,
+  KeyRound,
+  LogOut,
+  Plus,
+  Save,
+  Share2,
+  Trash2,
+  UserRound,
+  X
+} from 'lucide-react';
 
 const API_URL = "https://gym-tracker-api-yomc.onrender.com";
 
@@ -239,10 +253,19 @@ function ReportModal({ sessionData, allExercises, user, onClose, onShare, onDele
       </div>
 
       <div className="flex gap-3 mt-6 w-full max-w-sm">
-        <button onClick={onClose} className="flex-1 bg-gray-800 border border-gray-700 py-4 rounded-2xl font-bold text-gray-300 hover:text-white transition-colors">FECHAR</button>
-        <button onClick={onShare} className="flex-1 bg-blue-600 shadow-lg shadow-blue-600/30 py-4 rounded-2xl font-black tracking-wider hover:bg-blue-500 transition-colors">COMPARTILHAR</button>
+        <button onClick={onClose} className="flex-1 bg-gray-800 border border-gray-700 py-4 rounded-2xl font-bold text-gray-300 hover:text-white transition-colors flex items-center justify-center gap-2">
+          <X size={16} />
+          FECHAR
+        </button>
+        <button onClick={onShare} className="flex-1 bg-blue-600 shadow-lg shadow-blue-600/30 py-4 rounded-2xl font-black tracking-wider hover:bg-blue-500 transition-colors flex items-center justify-center gap-2">
+          <Share2 size={16} />
+          COMPARTILHAR
+        </button>
       </div>
-      <button onClick={onDelete} className="mt-6 text-red-500/70 text-xs font-bold uppercase hover:text-red-400 transition-colors underline underline-offset-4">Excluir Registro</button>
+      <button onClick={onDelete} className="mt-6 text-red-500/70 text-xs font-bold uppercase hover:text-red-400 transition-colors underline underline-offset-4 flex items-center gap-2">
+        <Trash2 size={14} />
+        Excluir Registro
+      </button>
     </div>
   );
 }
@@ -810,10 +833,10 @@ export default function App() {
   const totalSeriesPlanejadas = exerciciosAtuais.reduce((acc, plan) => acc + (plan.seriesAlvo || 3), 0);
   const totalSeriesFeitas = currentLogs.length;
   const navItems = [
-    { id: 'treinar', label: 'Treinar', mark: 'T' },
-    { id: 'fichas', label: 'Fichas', mark: 'F' },
-    { id: 'evolucao', label: 'Evolução', mark: 'E' },
-    { id: 'perfil', label: 'Perfil', mark: 'P' }
+    { id: 'treinar', label: 'Treinar', Icon: BicepsFlexed },
+    { id: 'fichas', label: 'Fichas', Icon: ClipboardList },
+    { id: 'evolucao', label: 'Evolução', Icon: ChartLine },
+    { id: 'perfil', label: 'Perfil', Icon: UserRound }
   ] as const;
 
   return (
@@ -886,7 +909,9 @@ export default function App() {
                             onChange={(e) => handleUpdateSeries(p.id, Number(e.target.value))}
                           />
                         </div>
-                        <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors">✕</button>
+                        <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors" aria-label="Remover exercício">
+                          <Trash2 size={16} />
+                        </button>
                       </div>
 
                     </div>
@@ -901,8 +926,9 @@ export default function App() {
                 <button
                   onClick={handleStartWorkout}
                   disabled={exerciciosAtuais.length === 0}
-                  className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-xl font-black uppercase tracking-widest disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-lg shadow-blue-500/30"
+                  className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-xl font-black uppercase tracking-widest disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2"
                 >
+                  <BicepsFlexed size={18} />
                   INICIAR TREINO
                 </button>
               </div>
@@ -981,7 +1007,9 @@ export default function App() {
                                 <div>
                                   <span className="text-sm font-black text-white">{log.carga} <span className="text-gray-500 font-normal text-xs">kg ×</span> {log.reps} <span className="text-gray-500 font-normal text-xs">reps</span></span>
                                 </div>
-                                <button onClick={() => log.id && handleDeleteSerie(log.id)} className="text-red-500 hover:text-red-400 font-bold p-1 text-xs opacity-70 hover:opacity-100 transition-opacity">✕</button>
+                                <button onClick={() => log.id && handleDeleteSerie(log.id)} className="text-red-500 hover:text-red-400 font-bold p-1 text-xs opacity-70 hover:opacity-100 transition-opacity" aria-label="Excluir série">
+                                  <Trash2 size={14} />
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -1032,9 +1060,10 @@ export default function App() {
                           <button
                             onClick={() => handleAddSerie(p.exercise.id)}
                             disabled={!cargas[p.exercise.id] || !repsSet[p.exercise.id]}
-                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed py-3 rounded-xl font-black text-[11px] uppercase tracking-wider transition-colors"
+                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed py-3 rounded-xl font-black text-[11px] uppercase tracking-wider transition-colors flex items-center justify-center gap-2"
                           >
-                            + SÉRIE
+                            <Plus size={15} />
+                            SÉRIE
                           </button>
 
                           {fantasma && (
@@ -1051,10 +1080,12 @@ export default function App() {
 
                 {/* BOTÕES DE AÇÃO DO TREINO */}
                 <div className="mt-8 space-y-3">
-                  <button onClick={handleEndWorkout} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-green-500/20 transition-all">
+                  <button onClick={handleEndWorkout} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-green-500/20 transition-all flex items-center justify-center gap-2">
+                    <CheckCircle2 size={18} />
                     FINALIZAR TREINO
                   </button>
-                  <button onClick={handleCancelWorkout} className="w-full py-4 rounded-2xl font-bold text-red-500/80 uppercase tracking-widest hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/30 text-xs">
+                  <button onClick={handleCancelWorkout} className="w-full py-4 rounded-2xl font-bold text-red-500/80 uppercase tracking-widest hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/30 text-xs flex items-center justify-center gap-2">
+                    <X size={15} />
                     Cancelar Treino
                   </button>
                 </div>
@@ -1073,7 +1104,10 @@ export default function App() {
                   <p className="text-xs font-bold uppercase tracking-widest text-blue-400">Biblioteca</p>
                   <h2 className="text-2xl font-black">Configurar Fichas</h2>
                 </div>
-                <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-500">Adicionar</button>
+                <button onClick={() => setIsLibraryOpen(true)} className="bg-blue-600 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-500 flex items-center gap-2">
+                  <Plus size={15} />
+                  Adicionar
+                </button>
               </div>
 
               <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl border border-gray-800">
@@ -1101,14 +1135,19 @@ export default function App() {
                             onChange={(e) => handleUpdateSeries(p.id, Number(e.target.value))}
                           />
                         </div>
-                        <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors">✕</button>
+                        <button onClick={() => handleRemoveFromPlan(p.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors" aria-label="Remover exercício">
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </div>
                   </div>
                 )) : (
                   <div className="text-center py-10 bg-gray-900/50 rounded-2xl border border-gray-800 border-dashed">
                     <p className="text-gray-500">Nenhum exercício na Ficha {fichaAtiva}.</p>
-                    <button onClick={() => setIsLibraryOpen(true)} className="mt-3 text-xs font-black uppercase tracking-wider text-blue-400">Adicionar exercício</button>
+                    <button onClick={() => setIsLibraryOpen(true)} className="mt-3 text-xs font-black uppercase tracking-wider text-blue-400 inline-flex items-center gap-2">
+                      <Plus size={14} />
+                      Adicionar exercício
+                    </button>
                   </div>
                 )}
               </div>
@@ -1218,8 +1257,9 @@ export default function App() {
                 </p>
                 <button
                   disabled={isSavingProfile}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-green-500/20"
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-green-500/20 flex items-center justify-center gap-2"
                 >
+                  <Save size={16} />
                   {isSavingProfile ? 'Salvando...' : 'Salvar Perfil'}
                 </button>
               </form>
@@ -1236,13 +1276,15 @@ export default function App() {
                 />
                 <button
                   disabled={!novaSenha}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-blue-500/20"
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
                 >
+                  <KeyRound size={16} />
                   Atualizar Senha
                 </button>
               </form>
 
-              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors">
+              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2">
+                <LogOut size={16} />
                 Sair da Conta
               </button>
             </div>
@@ -1285,7 +1327,9 @@ export default function App() {
           <div className="fixed inset-0 bg-gray-950 z-50 flex flex-col animate-in slide-in-from-bottom duration-200">
             <header className="p-6 flex justify-between items-center border-b border-gray-800 bg-gray-900">
               <h2 className="text-xl font-bold">Adicionar Exercício</h2>
-              <button onClick={() => setIsLibraryOpen(false)} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+              <button onClick={() => setIsLibraryOpen(false)} className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-gray-800 transition-colors" aria-label="Fechar biblioteca">
+                <X size={22} />
+              </button>
             </header>
 
             <div className="flex bg-gray-900 border-b border-gray-800 p-2">
@@ -1321,7 +1365,10 @@ export default function App() {
                       <select className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none" value={novoExGrupo} onChange={e => setNovoExGrupo(e.target.value)}>
                         {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(g => <option key={g} value={g}>{g}</option>)}
                       </select>
-                      <button className="w-full bg-green-600 py-4 rounded-xl font-bold">SALVAR</button>
+                      <button className="w-full bg-green-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2">
+                        <Save size={16} />
+                        SALVAR
+                      </button>
                     </form>
                   </div>
 
@@ -1340,7 +1387,9 @@ export default function App() {
                                 <button key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-2 py-1 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors">+{f}</button>
                               ))}
                               <div className="w-px h-6 bg-gray-700 mx-1"></div>
-                              <button onClick={() => handleDeleteCustomExercise(ex.id)} className="text-red-500 hover:text-red-400 p-1">✕</button>
+                              <button onClick={() => handleDeleteCustomExercise(ex.id)} className="text-red-500 hover:text-red-400 p-1" aria-label="Excluir exercício">
+                                <Trash2 size={15} />
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -1384,13 +1433,16 @@ export default function App() {
         <div className="grid grid-cols-4 gap-2">
           {navItems.map(item => {
             const isActive = activeTab === item.id;
+            const Icon = item.Icon;
             return (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 className={`flex min-h-14 flex-col items-center justify-center rounded-2xl text-[11px] font-black transition-colors ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}
               >
-                <span className={`mb-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${isActive ? 'bg-white/15' : 'bg-gray-900'}`}>{item.mark}</span>
+                <span className={`mb-1 flex h-6 w-6 items-center justify-center rounded-full ${isActive ? 'bg-white/15' : 'bg-gray-900'}`}>
+                  <Icon size={15} strokeWidth={2.4} />
+                </span>
                 {item.label}
               </button>
             );
