@@ -282,6 +282,7 @@ function ReportModal({ sessionData, allExercises, user, onClose, onShare, onDele
 // --- APLICATIVO ---
 export default function App() {
   const wakeLockRef = useRef<any>(null);
+  const hasHandledExpiredSessionRef = useRef(false);
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'treinar' | 'fichas' | 'evolucao' | 'perfil'>('treinar');
   const [fichaAtiva, setFichaAtiva] = useState('A');
@@ -364,14 +365,39 @@ export default function App() {
     setConfirmState(null);
   };
 
-  const authFetch = (path: string, options: RequestInit = {}) => {
+  const handleExpiredSession = () => {
+    if (hasHandledExpiredSessionRef.current) return;
+
+    hasHandledExpiredSessionRef.current = true;
+    localStorage.removeItem('@GymTracker:user');
+    localStorage.removeItem('@GymTracker:activeSession');
+    setUser(null);
+    setActiveSession(null);
+    setCurrentLogs([]);
+    setSelectedReport(null);
+    setDaySessions(null);
+    stopRestTimer();
+    showToast('Sua sessão expirou. Faça login novamente.', 'info');
+
+    window.setTimeout(() => {
+      hasHandledExpiredSessionRef.current = false;
+    }, 3000);
+  };
+
+  const authFetch = async (path: string, options: RequestInit = {}) => {
     const headers = new Headers(options.headers);
     if (user?.token) headers.set('Authorization', `Bearer ${user.token}`);
 
-    return fetch(`${API_URL}${path}`, {
+    const response = await fetch(`${API_URL}${path}`, {
       ...options,
       headers
     });
+
+    if (response.status === 401) {
+      handleExpiredSession();
+    }
+
+    return response;
   };
 
   const checkServerAwake = async (showSuccessToast = false) => {
