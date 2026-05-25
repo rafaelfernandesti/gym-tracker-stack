@@ -82,7 +82,7 @@ const parsePositiveInt = (value) => {
     const parsed = Number(value);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4173,https://gym-tracker-web-yomc.onrender.com')
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4173,https://gym-tracker-web-yomc.onrender.com,https://gym-tracker-stack.vercel.app')
     .split(',')
     .map(origin => origin.trim())
     .filter(Boolean);
@@ -93,7 +93,8 @@ const isAllowedOrigin = (origin) => {
         const parsedOrigin = new URL(origin);
         const isLocalhost = ['localhost', '127.0.0.1'].includes(parsedOrigin.hostname);
         const isRenderApp = parsedOrigin.protocol === 'https:' && parsedOrigin.hostname.endsWith('.onrender.com');
-        return isLocalhost || isRenderApp;
+        const isVercelApp = parsedOrigin.protocol === 'https:' && parsedOrigin.hostname.endsWith('.vercel.app');
+        return isLocalhost || isRenderApp || isVercelApp;
     }
     catch (error) {
         return false;
