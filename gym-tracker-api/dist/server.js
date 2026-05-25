@@ -58,9 +58,9 @@ const userResponse = (user) => ({
     token: signAuthToken(user.id)
 });
 const sendPasswordResetEmail = async (email, resetUrl) => {
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.PASSWORD_RESET_FROM;
-    if (!apiKey || !from) {
+    const apiKey = process.env.RESEND_API_KEY || process.env.RESEND_API || process.env.RESENDER_API;
+    const from = process.env.PASSWORD_RESET_FROM || 'GymTracker <onboarding@resend.dev>';
+    if (!apiKey) {
         console.log(`Link de recuperação para ${email}: ${resetUrl}`);
         return false;
     }
