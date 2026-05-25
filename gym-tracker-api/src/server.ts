@@ -100,9 +100,23 @@ const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http:/
     .map(origin => origin.trim())
     .filter(Boolean);
 
+const isAllowedOrigin = (origin?: string) => {
+    if (!origin || allowedOrigins.includes(origin)) return true;
+
+    try {
+        const parsedOrigin = new URL(origin);
+        const isLocalhost = ['localhost', '127.0.0.1'].includes(parsedOrigin.hostname);
+        const isRenderApp = parsedOrigin.protocol === 'https:' && parsedOrigin.hostname.endsWith('.onrender.com');
+
+        return isLocalhost || isRenderApp;
+    } catch (error) {
+        return false;
+    }
+};
+
 app.use(cors({
     origin(origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        if (isAllowedOrigin(origin)) return callback(null, true);
         return callback(new Error('Origem não permitida pelo CORS.'));
     }
 }));
