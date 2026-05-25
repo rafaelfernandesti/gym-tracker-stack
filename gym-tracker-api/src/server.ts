@@ -8,12 +8,15 @@ const app = express();
 const prisma = new PrismaClient();
 const BCRYPT_ROUNDS = 10;
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
+const PASSWORD_RESET_TTL_MINUTES = 30;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-change-this-secret';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://gym-tracker-stack.vercel.app';
 
 type AuthRequest = express.Request & { userId?: string };
 
 const isBcryptHash = (value: string) => /^\$2[aby]\$\d{2}\$/.test(value);
 const base64Url = (value: string | Buffer) => Buffer.from(value).toString('base64url');
+const hashResetToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
 
 const signAuthToken = (userId: string) => {
     const header = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
@@ -63,6 +66,42 @@ const userResponse = (user: { id: string; nome: string | null; email: string; fo
     foto: user.foto,
     token: signAuthToken(user.id)
 });
+
+const sendPasswordResetEmail = async (email: string, resetUrl: string) => {
+    const apiKey = process.env.RESEND_API_KEY;
+    const from = process.env.PASSWORD_RESET_FROM;
+
+    if (!apiKey || !from) {
+        console.log(`Link de recuperação para ${email}: ${resetUrl}`);
+        return false;
+    }
+
+    const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            from,
+            to: email,
+            subject: 'Recuperação de senha - GymTracker',
+            html: `
+                <p>Você solicitou a recuperação de senha do GymTracker.</p>
+                <p>Use este link nos próximos ${PASSWORD_RESET_TTL_MINUTES} minutos:</p>
+                <p><a href="${resetUrl}">Redefinir senha</a></p>
+                <p>Se você não pediu isso, ignore este e-mail.</p>
+            `
+        })
+    });
+
+    if (!response.ok) {
+        const details = await response.text().catch(() => '');
+        throw new Error(`Falha ao enviar e-mail de recuperação: ${details}`);
+    }
+
+    return true;
+};
 
 const requireAuth: express.RequestHandler = (req: AuthRequest, res, next) => {
     const token = req.header('Authorization')?.replace(/^Bearer\s+/i, '');
@@ -179,6 +218,86 @@ app.post('/login', async (req, res) => {
     } catch (error) {
         console.error('ERRO NO LOGIN:', error);
         res.status(500).json({ error: 'Erro interno no servidor.' });
+    }
+});
+
+app.post('/password/forgot', async (req, res) => {
+    const { email } = req.body;
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const genericResponse: { message: string; resetUrl?: string } = {
+        message: 'Se o e-mail estiver cadastrado, enviaremos instruções para recuperar sua senha.'
+    };
+
+    if (!normalizedEmail) return res.json(genericResponse);
+
+    try {
+        const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+        if (!user) return res.json(genericResponse);
+
+        await prisma.passwordResetToken.updateMany({
+            where: { userId: user.id, usedAt: null },
+            data: { usedAt: new Date() }
+        });
+
+        const resetToken = crypto.randomBytes(32).toString('base64url');
+        const resetUrl = `${FRONTEND_URL.replace(/\/$/, '')}/?resetToken=${encodeURIComponent(resetToken)}`;
+
+        await prisma.passwordResetToken.create({
+            data: {
+                userId: user.id,
+                tokenHash: hashResetToken(resetToken),
+                expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MINUTES * 60 * 1000)
+            }
+        });
+
+        const emailSent = await sendPasswordResetEmail(normalizedEmail, resetUrl);
+
+        if (!emailSent && process.env.NODE_ENV !== 'production') {
+            genericResponse.resetUrl = resetUrl;
+        }
+
+        res.json(genericResponse);
+    } catch (error) {
+        console.error('ERRO AO SOLICITAR RECUPERAÇÃO DE SENHA:', error);
+        res.status(500).json({ error: 'Erro ao solicitar recuperação de senha.' });
+    }
+});
+
+app.post('/password/reset', async (req, res) => {
+    const { token, novaSenha } = req.body;
+
+    if (typeof token !== 'string' || typeof novaSenha !== 'string' || novaSenha.trim().length < 6) {
+        return res.status(400).json({ error: 'Link inválido ou senha menor que 6 caracteres.' });
+    }
+
+    try {
+        const tokenHash = hashResetToken(token);
+        const resetToken = await prisma.passwordResetToken.findUnique({
+            where: { tokenHash },
+            include: { user: true }
+        });
+
+        if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+            return res.status(400).json({ error: 'Link de recuperação inválido ou expirado.' });
+        }
+
+        const hashSenha = await bcrypt.hash(novaSenha, BCRYPT_ROUNDS);
+
+        await prisma.$transaction([
+            prisma.user.update({
+                where: { id: resetToken.userId },
+                data: { senha: hashSenha }
+            }),
+            prisma.passwordResetToken.update({
+                where: { id: resetToken.id },
+                data: { usedAt: new Date() }
+            })
+        ]);
+
+        res.json(userResponse(resetToken.user));
+    } catch (error) {
+        console.error('ERRO AO REDEFINIR SENHA:', error);
+        res.status(500).json({ error: 'Erro ao redefinir senha.' });
     }
 });
 

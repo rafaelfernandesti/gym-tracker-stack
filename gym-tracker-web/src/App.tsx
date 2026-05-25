@@ -307,6 +307,7 @@ export default function App() {
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [libTab, setLibTab] = useState<'global' | 'custom'>('global');
   const [isLogin, setIsLogin] = useState(true);
+  const [authMode, setAuthMode] = useState<'auth' | 'forgot' | 'reset'>('auth');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -334,6 +335,7 @@ export default function App() {
   const [senha, setSenha] = useState('');
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [profileName, setProfileName] = useState('');
   const [profilePhoto, setProfilePhoto] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -436,6 +438,14 @@ export default function App() {
   };
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get('resetToken');
+    if (tokenFromUrl) {
+      setResetToken(tokenFromUrl);
+      setAuthMode('reset');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     const saved = localStorage.getItem('@GymTracker:user');
     if (saved) {
       const parsedUser = JSON.parse(saved);
@@ -650,6 +660,70 @@ export default function App() {
     } finally {
       window.clearTimeout(wakeTimer);
       setIsServerWaking(false);
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: any) => {
+    e.preventDefault();
+    if (!email || isAuthLoading) return;
+
+    setIsAuthLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/password/forgot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json().catch(() => null);
+
+      if (res.ok) {
+        showToast(data?.message || 'Se o e-mail existir, enviaremos instruções.', 'success');
+        if (data?.resetUrl) {
+          const token = new URL(data.resetUrl).searchParams.get('resetToken');
+          if (token) {
+            setResetToken(token);
+            setAuthMode('reset');
+          }
+        } else {
+          setAuthMode('auth');
+        }
+      } else {
+        showToast(data?.error || 'Não foi possível solicitar recuperação.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível solicitar recuperação.', 'error');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: any) => {
+    e.preventDefault();
+    if (!resetToken || !novaSenha || isAuthLoading) return;
+
+    setIsAuthLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/password/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, novaSenha })
+      });
+      const data = await res.json().catch(() => null);
+
+      if (res.ok) {
+        setUser(data);
+        localStorage.setItem('@GymTracker:user', JSON.stringify(data));
+        setResetToken('');
+        setNovaSenha('');
+        setAuthMode('auth');
+        showToast('Senha redefinida com sucesso.', 'success');
+      } else {
+        showToast(data?.error || 'Não foi possível redefinir a senha.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível redefinir a senha.', 'error');
+    } finally {
       setIsAuthLoading(false);
     }
   };
@@ -1086,7 +1160,13 @@ export default function App() {
           <div className="flex flex-col items-center justify-center mb-8">
             <img src="/logo.png" alt="GymTracker Logo" className="w-20 h-20 mb-4 rounded-2xl shadow-lg" onError={(e) => e.currentTarget.style.display = 'none'} />
             <h1 className="text-3xl font-black text-blue-500 tracking-tight">GYM<span className="text-white">TRACKER</span></h1>
-            <p className="text-gray-400 text-sm mt-2">{isLogin ? 'Continue seu treino de onde parou.' : 'Crie sua conta para acompanhar evolução.'}</p>
+            <p className="text-gray-400 text-sm mt-2">
+              {authMode === 'forgot'
+                ? 'Informe seu e-mail para recuperar o acesso.'
+                : authMode === 'reset'
+                  ? 'Defina uma nova senha para sua conta.'
+                  : isLogin ? 'Continue seu treino de onde parou.' : 'Crie sua conta para acompanhar evolução.'}
+            </p>
           </div>
 
           {(isCheckingServer || isServerWaking || serverStatus === 'offline') && (
@@ -1116,15 +1196,43 @@ export default function App() {
             </div>
           )}
 
-          <form onSubmit={handleAuth} className="space-y-4">
-            <input disabled={isAuthLoading} type="email" placeholder="E-mail" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors disabled:opacity-60" value={email} onChange={e => setEmail(e.target.value)} />
-            <input disabled={isAuthLoading} type="password" placeholder="Senha" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors disabled:opacity-60" value={senha} onChange={e => setSenha(e.target.value)} />
-            <button disabled={isAuthLoading} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-              {isAuthLoading && <LoadingIcon size={17} />}
-              {isAuthLoading ? (isServerWaking ? 'Acordando servidor...' : isLogin ? 'Entrando...' : 'Cadastrando...') : (isLogin ? 'Entrar' : 'Cadastrar')}
-            </button>
-          </form>
-          <button disabled={isAuthLoading} onClick={() => setIsLogin(!isLogin)} className="w-full mt-6 text-gray-400 text-sm hover:text-white transition-colors disabled:opacity-50">{isLogin ? 'Criar nova conta' : 'Já tenho conta'}</button>
+          {authMode === 'forgot' ? (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <input disabled={isAuthLoading} type="email" placeholder="E-mail" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors disabled:opacity-60" value={email} onChange={e => setEmail(e.target.value)} />
+              <button disabled={isAuthLoading || !email} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                {isAuthLoading && <LoadingIcon size={17} />}
+                {isAuthLoading ? 'Enviando...' : 'Enviar Link'}
+              </button>
+            </form>
+          ) : authMode === 'reset' ? (
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <input disabled={isAuthLoading} type="password" placeholder="Nova senha" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors disabled:opacity-60" value={novaSenha} onChange={e => setNovaSenha(e.target.value)} />
+              <button disabled={isAuthLoading || !novaSenha} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                {isAuthLoading && <LoadingIcon size={17} />}
+                {isAuthLoading ? 'Salvando...' : 'Redefinir Senha'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleAuth} className="space-y-4">
+              <input disabled={isAuthLoading} type="email" placeholder="E-mail" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors disabled:opacity-60" value={email} onChange={e => setEmail(e.target.value)} />
+              <input disabled={isAuthLoading} type="password" placeholder="Senha" className="w-full bg-gray-950 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition-colors disabled:opacity-60" value={senha} onChange={e => setSenha(e.target.value)} />
+              <button disabled={isAuthLoading} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                {isAuthLoading && <LoadingIcon size={17} />}
+                {isAuthLoading ? (isServerWaking ? 'Acordando servidor...' : isLogin ? 'Entrando...' : 'Cadastrando...') : (isLogin ? 'Entrar' : 'Cadastrar')}
+              </button>
+            </form>
+          )}
+          {authMode === 'auth' && (
+            <div className="mt-6 space-y-3 text-center">
+              {isLogin && (
+                <button disabled={isAuthLoading} onClick={() => setAuthMode('forgot')} className="w-full text-gray-400 text-sm hover:text-white transition-colors disabled:opacity-50">Esqueci minha senha</button>
+              )}
+              <button disabled={isAuthLoading} onClick={() => setIsLogin(!isLogin)} className="w-full text-gray-400 text-sm hover:text-white transition-colors disabled:opacity-50">{isLogin ? 'Criar nova conta' : 'Já tenho conta'}</button>
+            </div>
+          )}
+          {authMode !== 'auth' && (
+            <button disabled={isAuthLoading} onClick={() => { setAuthMode('auth'); setResetToken(''); }} className="w-full mt-6 text-gray-400 text-sm hover:text-white transition-colors disabled:opacity-50">Voltar para login</button>
+          )}
         </div>
       </div>
     );

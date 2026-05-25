@@ -20,8 +20,20 @@ model User {
   WorkoutLog      WorkoutLog[]
   WorkoutSession  WorkoutSession[]
   customExercises Exercise[]
+  passwordResetTokens PasswordResetToken[]
   workoutPlans    WorkoutPlan[]
   weightLogs      WeightLog[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  userId String
+  user   User      @relation(fields: [userId], references: [id])
 }
 
 model WeightLog {
