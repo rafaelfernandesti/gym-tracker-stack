@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
@@ -6,55 +7,151 @@ import bcrypt from 'bcrypt';
 const app = express();
 const prisma = new PrismaClient();
 const BCRYPT_ROUNDS = 10;
+const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-change-this-secret';
+
+type AuthRequest = express.Request & { userId?: string };
 
 const isBcryptHash = (value: string) => /^\$2[aby]\$\d{2}\$/.test(value);
+const base64Url = (value: string | Buffer) => Buffer.from(value).toString('base64url');
 
-app.use(cors()); // Permite conexões do front-end
-app.use(express.json());
+const signAuthToken = (userId: string) => {
+    const header = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const payload = base64Url(JSON.stringify({
+        sub: userId,
+        exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS
+    }));
+    const signature = crypto
+        .createHmac('sha256', JWT_SECRET)
+        .update(`${header}.${payload}`)
+        .digest('base64url');
 
-// ROTA: Criar nova conta
+    return `${header}.${payload}.${signature}`;
+};
+
+const verifyAuthToken = (token: string) => {
+    const [header, payload, signature] = token.split('.');
+    if (!header || !payload || !signature) return null;
+
+    const expectedSignature = crypto
+        .createHmac('sha256', JWT_SECRET)
+        .update(`${header}.${payload}`)
+        .digest('base64url');
+
+    const receivedSignature = Buffer.from(signature);
+    const validSignature = Buffer.from(expectedSignature);
+
+    if (
+        receivedSignature.length !== validSignature.length ||
+        !crypto.timingSafeEqual(receivedSignature, validSignature)
+    ) {
+        return null;
+    }
+
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { sub?: string; exp?: number };
+    if (!decoded.sub || !decoded.exp || decoded.exp < Math.floor(Date.now() / 1000)) {
+        return null;
+    }
+
+    return decoded.sub;
+};
+
+const userResponse = (user: { id: string; nome: string | null; email: string; foto: string | null }) => ({
+    id: user.id,
+    nome: user.nome,
+    email: user.email,
+    foto: user.foto,
+    token: signAuthToken(user.id)
+});
+
+const requireAuth: express.RequestHandler = (req: AuthRequest, res, next) => {
+    const token = req.header('Authorization')?.replace(/^Bearer\s+/i, '');
+    if (!token) {
+        return res.status(401).json({ error: 'Autenticação necessária.' });
+    }
+
+    try {
+        const userId = verifyAuthToken(token);
+        if (!userId) return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
+        req.userId = userId;
+        next();
+    } catch (error) {
+        return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
+    }
+};
+
+const requireSameUserParam = (req: AuthRequest, res: express.Response, paramUserId?: string) => {
+    if (!req.userId || (paramUserId && paramUserId !== req.userId)) {
+        res.status(403).json({ error: 'Acesso negado.' });
+        return false;
+    }
+    return true;
+};
+
+const routeParam = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
+
+const parsePositiveInt = (value: string | number | undefined) => {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4173,https://gym-tracker-web-yomc.onrender.com')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(new Error('Origem não permitida pelo CORS.'));
+    }
+}));
+app.use(express.json({ limit: '1mb' }));
+
+app.get('/ping', (req, res) => {
+    res.json({ message: 'Gym Tracker API online e conectada ao banco!' });
+});
+
 app.post('/register', async (req, res) => {
     const { email, senha, nome, foto } = req.body;
 
-    try {
-        // Criptografa a senha antes de salvar
-        const hashSenha = await bcrypt.hash(senha, BCRYPT_ROUNDS);
+    if (typeof email !== 'string' || typeof senha !== 'string' || senha.trim().length < 6) {
+        return res.status(400).json({ error: 'Informe e-mail e senha com pelo menos 6 caracteres.' });
+    }
 
+    try {
+        const hashSenha = await bcrypt.hash(senha, BCRYPT_ROUNDS);
         const user = await prisma.user.create({
             data: {
-                email,
+                email: email.trim().toLowerCase(),
                 senha: hashSenha,
-                nome,
-                foto
+                nome: typeof nome === 'string' ? nome : null,
+                foto: typeof foto === 'string' ? foto : null
             }
         });
 
-        // Devolve os dados (menos a senha) para o Front-end fazer o login automático
-        res.status(201).json({ id: user.id, nome: user.nome, email: user.email, foto: user.foto });
+        res.status(201).json(userResponse(user));
     } catch (error) {
-        console.error("ERRO AO CRIAR USUÁRIO:", error);
+        console.error('ERRO AO CRIAR USUÁRIO:', error);
         res.status(400).json({ error: 'E-mail já cadastrado ou dados inválidos.' });
     }
 });
 
-// ROTA: Fazer Login
 app.post('/login', async (req, res) => {
     const { email, senha } = req.body;
 
-    try {
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) {
-            return res.status(404).json({ error: 'Usuário não encontrado.' });
-        }
+    if (typeof email !== 'string' || typeof senha !== 'string') {
+        return res.status(401).json({ error: 'Credenciais inválidas.' });
+    }
 
-        // Compara a senha digitada com o hash salvo no banco.
-        // Se existir senha antiga em texto puro, migra para hash no login correto.
+    try {
+        const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+        if (!user) return res.status(401).json({ error: 'Credenciais inválidas.' });
+
         const senhaValida = isBcryptHash(user.senha)
             ? await bcrypt.compare(senha, user.senha)
             : senha === user.senha;
-        if (!senhaValida) {
-            return res.status(401).json({ error: 'Senha incorreta.' });
-        }
+        if (!senhaValida) return res.status(401).json({ error: 'Credenciais inválidas.' });
 
         if (!isBcryptHash(user.senha)) {
             await prisma.user.update({
@@ -63,40 +160,54 @@ app.post('/login', async (req, res) => {
             });
         }
 
-        res.json({ id: user.id, nome: user.nome, email: user.email, foto: user.foto });
+        res.json(userResponse(user));
     } catch (error) {
-        console.error("ERRO NO LOGIN:", error);
+        console.error('ERRO NO LOGIN:', error);
         res.status(500).json({ error: 'Erro interno no servidor.' });
     }
 });
 
-app.get('/ping', (req, res) => {
-    res.json({ message: 'Gym Tracker API online e conectada ao banco!' });
+app.use(requireAuth);
+
+app.get('/me', async (req: AuthRequest, res) => {
+    const user = await prisma.user.findUnique({
+        where: { id: req.userId },
+        select: { id: true, nome: true, email: true, foto: true }
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    res.json(user);
 });
 
-app.get('/exercises', async (req, res) => {
-    try {
-        const exercises = await prisma.exercise.findMany();
-        res.json(exercises);
-    } catch (error) {
-        console.error("ERRO NO PRISMA:", error);
-        // Agora vamos mandar o erro real para o Front-end ver
-        res.status(500).json({
-            error: 'Erro ao buscar exercícios.',
-            detalhes: String(error)
-        });
-    }
-});
-
-// BUSCAR EXERCÍCIOS: Globais (userId null) + Customizados do Usuário
-app.get('/exercises/:userId', async (req, res) => {
-    const { userId } = req.params;
+app.get('/exercises', async (req: AuthRequest, res) => {
     try {
         const exercises = await prisma.exercise.findMany({
             where: {
                 OR: [
-                    { userId: null },   // Exercícios padrão
-                    { userId: userId }  // Exercícios criados por este usuário
+                    { userId: null },
+                    { userId: req.userId }
+                ]
+            },
+            orderBy: [
+                { grupoMuscular: 'asc' },
+                { nome: 'asc' }
+            ]
+        });
+        res.json(exercises);
+    } catch (error) {
+        console.error('ERRO NO PRISMA:', error);
+        res.status(500).json({ error: 'Erro ao buscar exercícios.' });
+    }
+});
+
+app.get('/exercises/:userId', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.userId))) return;
+
+    try {
+        const exercises = await prisma.exercise.findMany({
+            where: {
+                OR: [
+                    { userId: null },
+                    { userId: req.userId }
                 ]
             },
             orderBy: [
@@ -110,15 +221,18 @@ app.get('/exercises/:userId', async (req, res) => {
     }
 });
 
-// CRIAR EXERCÍCIO CUSTOMIZADO
-app.post('/exercises', async (req, res) => {
-    const { nome, grupoMuscular, userId } = req.body;
+app.post('/exercises', async (req: AuthRequest, res) => {
+    const { nome, grupoMuscular } = req.body;
+    if (typeof nome !== 'string' || !nome.trim()) {
+        return res.status(400).json({ error: 'Nome do exercício é obrigatório.' });
+    }
+
     try {
         const exercise = await prisma.exercise.create({
             data: {
-                nome,
-                grupoMuscular,
-                userId // Agora vinculado ao dono
+                nome: nome.trim(),
+                grupoMuscular: typeof grupoMuscular === 'string' && grupoMuscular.trim() ? grupoMuscular.trim() : 'Geral',
+                userId: req.userId
             }
         });
         res.status(201).json(exercise);
@@ -127,62 +241,118 @@ app.post('/exercises', async (req, res) => {
     }
 });
 
-// EXCLUIR EXERCÍCIO (Apenas se for customizado do usuário)
-app.delete('/exercises/:id/:userId', async (req, res) => {
-    const { id, userId } = req.params;
+app.put('/exercises/:id', async (req: AuthRequest, res) => {
+    const id = parsePositiveInt(routeParam(req.params.id));
+    const { nome, grupoMuscular } = req.body;
+    if (!id) return res.status(400).json({ error: 'Exercício inválido.' });
+
     try {
-        const ex = await prisma.exercise.findFirst({
-            where: { id: Number(id), userId: userId }
+        const exercise = await prisma.exercise.updateMany({
+            where: { id, userId: req.userId },
+            data: {
+                nome: typeof nome === 'string' && nome.trim() ? nome.trim() : undefined,
+                grupoMuscular: typeof grupoMuscular === 'string' ? grupoMuscular : undefined
+            }
         });
-
-        if (!ex) return res.status(403).json({ error: 'Você não pode excluir um exercício padrão.' });
-
-        await prisma.exercise.delete({ where: { id: Number(id) } });
-        res.json({ message: 'Excluído com sucesso.' });
+        if (!exercise.count) return res.status(403).json({ error: 'Você só pode editar exercícios criados por você.' });
+        const updated = await prisma.exercise.findUnique({ where: { id } });
+        res.json(updated);
     } catch (error) {
-        res.status(500).json({ error: 'Erro ao excluir.' });
+        console.error('ERRO AO ATUALIZAR EXERCÍCIO:', error);
+        res.status(500).json({ error: 'Erro ao atualizar o exercício.' });
     }
 });
 
-// NOVA ROTA: Cadastrar Usuário
-app.post('/users', async (req, res) => {
-    const { nome, email, altura, pesoAtual, foto } = req.body;
-    try {
-        const user = await prisma.user.create({
-            data: { nome, email, altura, pesoAtual, foto }
-        });
-        res.status(201).json(user);
-    } catch (error) {
-        res.status(500).json({ error: 'Erro ao cadastrar usuário.' });
-    }
+app.delete('/exercises/:id/:userId', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.userId))) return;
+    return deleteCustomExercise(req, res);
 });
 
-// 1. Buscar a Ficha do Usuário (Corrigido: removido 'items' ou 'nome')
-app.put('/users/:id/profile', async (req, res) => {
-    const { id } = req.params;
+app.delete('/exercises/:id', deleteCustomExercise);
+
+async function deleteCustomExercise(req: AuthRequest, res: express.Response) {
+    const id = parsePositiveInt(routeParam(req.params.id));
+    if (!id) return res.status(400).json({ error: 'Exercício inválido.' });
+
+    try {
+        const exercise = await prisma.exercise.findFirst({ where: { id, userId: req.userId } });
+        if (!exercise) return res.status(403).json({ error: 'Você só pode excluir exercícios criados por você.' });
+
+        await prisma.$transaction([
+            prisma.workoutLog.deleteMany({ where: { exerciseId: id, userId: req.userId } }),
+            prisma.workoutPlan.deleteMany({ where: { exerciseId: id, userId: req.userId } }),
+            prisma.exercise.delete({ where: { id } })
+        ]);
+
+        res.json({ message: 'Exercício excluído com sucesso.' });
+    } catch (error) {
+        console.error('ERRO AO EXCLUIR EXERCÍCIO:', error);
+        res.status(500).json({ error: 'Erro ao excluir o exercício.' });
+    }
+}
+
+app.post('/users', (req, res) => {
+    res.status(410).json({ error: 'Use /register para criar conta com senha segura.' });
+});
+
+app.put('/users/:id/profile', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.id))) return;
     const { nome, foto } = req.body;
+
     try {
         const user = await prisma.user.update({
-            where: { id },
+            where: { id: req.userId },
             data: {
                 nome: nome === undefined ? undefined : nome,
                 foto: foto === undefined ? undefined : (foto || null)
             }
         });
-        res.json({ id: user.id, nome: user.nome, email: user.email, foto: user.foto });
+        res.json(userResponse(user));
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Erro ao atualizar o perfil.' });
     }
 });
 
-app.get('/plans/:userId', async (req, res) => {
-    const { userId } = req.params;
+app.put('/users/:id/password', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.id))) return;
+    const { senhaAtual, novaSenha } = req.body;
+
+    try {
+        if (typeof senhaAtual !== 'string') {
+            return res.status(400).json({ error: 'Informe a senha atual.' });
+        }
+        if (typeof novaSenha !== 'string' || novaSenha.trim().length < 6) {
+            return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+        const senhaAtualValida = isBcryptHash(user.senha)
+            ? await bcrypt.compare(senhaAtual, user.senha)
+            : senhaAtual === user.senha;
+        if (!senhaAtualValida) return res.status(401).json({ error: 'Senha atual incorreta.' });
+
+        await prisma.user.update({
+            where: { id: req.userId },
+            data: { senha: await bcrypt.hash(novaSenha, BCRYPT_ROUNDS) }
+        });
+        res.json({ message: 'Senha atualizada com sucesso!' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao atualizar a senha.' });
+    }
+});
+
+app.get('/plans/:userId', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.userId))) return;
+
     try {
         const plans = await prisma.workoutPlan.findMany({
-            where: { userId },
+            where: { userId: req.userId },
             include: { exercise: true },
-            orderBy: { ordem: 'asc' } // <-- GARANTA QUE ESTA LINHA EXISTA
+            orderBy: { ordem: 'asc' }
         });
         res.json(plans);
     } catch (error) {
@@ -190,64 +360,79 @@ app.get('/plans/:userId', async (req, res) => {
     }
 });
 
-// Reordenar Exercícios (Drag and Drop)
-app.put('/plans/reorder', async (req, res) => {
-    const { updates } = req.body; // Recebe uma lista de { id, ordem }
+app.put('/plans/reorder', async (req: AuthRequest, res) => {
+    const { updates } = req.body;
+    if (!Array.isArray(updates)) return res.status(400).json({ error: 'Atualizações inválidas.' });
+
     try {
-        // Atualiza a ordem de vários exercícios de uma vez só
         const transactions = updates.map((u: any) =>
-            prisma.workoutPlan.update({
-                where: { id: Number(u.id) },
+            prisma.workoutPlan.updateMany({
+                where: { id: Number(u.id), userId: req.userId },
                 data: { ordem: Number(u.ordem) }
             })
         );
-        await prisma.$transaction(transactions);
+        const results = await prisma.$transaction(transactions);
+        if (results.some(result => result.count === 0)) {
+            return res.status(403).json({ error: 'Acesso negado a uma ou mais fichas.' });
+        }
         res.json({ message: 'Ordem salva!' });
     } catch (error) {
         res.status(500).json({ error: 'Erro ao reordenar.' });
     }
 });
 
-
-// Atualizar Meta de Séries na Ficha
-app.put('/plans/:id', async (req, res) => {
-    const { id } = req.params;
+app.put('/plans/:id', async (req: AuthRequest, res) => {
+    const id = parsePositiveInt(routeParam(req.params.id));
     const { seriesAlvo } = req.body;
+    if (!id) return res.status(400).json({ error: 'Ficha inválida.' });
+
     try {
-        await prisma.workoutPlan.update({
-            where: { id: Number(id) },
+        const result = await prisma.workoutPlan.updateMany({
+            where: { id, userId: req.userId },
             data: { seriesAlvo: Number(seriesAlvo) }
         });
+        if (!result.count) return res.status(403).json({ error: 'Acesso negado.' });
         res.json({ message: 'Meta atualizada com sucesso.' });
     } catch (error) {
-        console.error("Erro ao atualizar meta:", error);
+        console.error('Erro ao atualizar meta:', error);
         res.status(500).json({ error: 'Erro ao atualizar meta.' });
     }
 });
 
-// Remover Exercício da Ficha
-app.delete('/plans/:id', async (req, res) => {
-    const { id } = req.params;
+app.delete('/plans/:id', async (req: AuthRequest, res) => {
+    const id = parsePositiveInt(routeParam(req.params.id));
+    if (!id) return res.status(400).json({ error: 'Ficha inválida.' });
+
     try {
-        // O Number(id) é crucial aqui, senão o banco recusa a exclusão
-        await prisma.workoutPlan.delete({
-            where: { id: Number(id) }
-        });
+        const result = await prisma.workoutPlan.deleteMany({ where: { id, userId: req.userId } });
+        if (!result.count) return res.status(403).json({ error: 'Acesso negado.' });
         res.json({ message: 'Exercício removido da ficha com sucesso.' });
     } catch (error) {
-        console.error("Erro ao deletar da ficha:", error);
+        console.error('Erro ao deletar da ficha:', error);
         res.status(500).json({ error: 'Erro ao remover exercício da ficha.' });
     }
 });
 
-// 2. Adicionar Exercício à Ficha (Corrigido: removido campos inexistentes)
-app.post('/plans', async (req, res) => {
-    const { userId, exerciseId, ficha } = req.body;
+app.post('/plans', async (req: AuthRequest, res) => {
+    const { exerciseId, ficha } = req.body;
+    const parsedExerciseId = parsePositiveInt(exerciseId);
+    if (!parsedExerciseId || typeof ficha !== 'string') {
+        return res.status(400).json({ error: 'Dados da ficha inválidos.' });
+    }
+
     try {
+        const exercise = await prisma.exercise.findFirst({
+            where: {
+                id: parsedExerciseId,
+                OR: [{ userId: null }, { userId: req.userId }]
+            }
+        });
+        if (!exercise) return res.status(403).json({ error: 'Exercício indisponível para este usuário.' });
+
         const plan = await prisma.workoutPlan.create({
             data: {
-                userId,
-                exerciseId: Number(exerciseId),
+                userId: req.userId!,
+                exerciseId: parsedExerciseId,
                 ficha: ficha.toUpperCase()
             }
         });
@@ -257,16 +442,32 @@ app.post('/plans', async (req, res) => {
         res.status(500).json({ error: 'Erro ao adicionar exercício à ficha.' });
     }
 });
-// NOVA ROTA: Registrar Execução Diária (Log)
-app.post('/logs', async (req, res) => {
-    const { userId, exerciseId, carga, repsFeitas, sessionId } = req.body;
+
+app.post('/logs', async (req: AuthRequest, res) => {
+    const { exerciseId, carga, repsFeitas, sessionId } = req.body;
+    const parsedExerciseId = parsePositiveInt(exerciseId);
+    if (!parsedExerciseId) return res.status(400).json({ error: 'Exercício inválido.' });
+
     try {
+        const exercise = await prisma.exercise.findFirst({
+            where: {
+                id: parsedExerciseId,
+                OR: [{ userId: null }, { userId: req.userId }]
+            }
+        });
+        if (!exercise) return res.status(403).json({ error: 'Exercício indisponível para este usuário.' });
+
+        if (sessionId) {
+            const session = await prisma.workoutSession.findFirst({ where: { id: sessionId, userId: req.userId } });
+            if (!session) return res.status(403).json({ error: 'Sessão indisponível para este usuário.' });
+        }
+
         const log = await prisma.workoutLog.create({
             data: {
-                userId,
-                exerciseId,
-                carga,
-                repsFeitas,
+                userId: req.userId!,
+                exerciseId: parsedExerciseId,
+                carga: Number(carga),
+                repsFeitas: Number(repsFeitas),
                 sessionId: sessionId || null
             }
         });
@@ -277,18 +478,18 @@ app.post('/logs', async (req, res) => {
     }
 });
 
-// NOVA ROTA: Histórico de Evolução de Carga
-app.get('/logs/evolution/:userId/:exerciseId', async (req, res) => {
-    const { userId, exerciseId } = req.params;
+app.get('/logs/evolution/:userId/:exerciseId', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.userId))) return;
+    const exerciseId = parsePositiveInt(routeParam(req.params.exerciseId));
+    if (!exerciseId) return res.status(400).json({ error: 'Exercício inválido.' });
+
     try {
         const evolution = await prisma.workoutLog.findMany({
             where: {
-                userId,
-                exerciseId: Number(exerciseId)
+                userId: req.userId,
+                exerciseId
             },
-            orderBy: {
-                data: 'asc'
-            },
+            orderBy: { data: 'asc' },
             select: {
                 id: true,
                 data: true,
@@ -302,127 +503,32 @@ app.get('/logs/evolution/:userId/:exerciseId', async (req, res) => {
         res.status(500).json({ error: 'Erro ao buscar o histórico de evolução.' });
     }
 });
-// Rota para cadastrar um novo exercício
-app.post('/exercises', async (req, res) => {
-    const { nome, grupoMuscular, equipamento } = req.body;
 
+app.delete('/logs/:id', async (req: AuthRequest, res) => {
     try {
-        const exercise = await prisma.exercise.create({
-            data: {
-                nome,
-                grupoMuscular: grupoMuscular || 'Geral',
-            }
-        });
-        res.status(201).json(exercise);
+        const result = await prisma.workoutLog.deleteMany({ where: { id: routeParam(req.params.id), userId: req.userId } });
+        if (!result.count) return res.status(403).json({ error: 'Acesso negado.' });
+        res.json({ message: 'Série removida com sucesso.' });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Erro ao criar exercício.' });
+        res.status(500).json({ error: 'Erro ao remover série.' });
     }
 });
 
-// Rota para deletar um registro de treino
-app.delete('/logs/:id', async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        await prisma.workoutLog.delete({
-            where: { id: id }
-        });
-        res.json({ message: 'Treino excluído com sucesso' });
-    } catch (error) {
-        console.error("ERRO AO EXCLUIR TREINO:", error);
-        res.status(500).json({ error: 'Erro ao excluir o registro.' });
+app.post('/weight', async (req: AuthRequest, res) => {
+    const { peso } = req.body;
+    const parsedPeso = Number(peso);
+    if (!Number.isFinite(parsedPeso) || parsedPeso <= 0) {
+        return res.status(400).json({ error: 'Peso inválido.' });
     }
-});
 
-// Rota para editar um exercício existente
-app.put('/exercises/:id', async (req, res) => {
-    const { id } = req.params;
-    const { nome, grupoMuscular, ficha } = req.body;
-
-    try {
-        const exercise = await prisma.exercise.update({
-            where: { id: Number(id) },
-            data: {
-                nome,
-                grupoMuscular
-            }
-        });
-        res.json(exercise);
-    } catch (error) {
-        console.error("ERRO AO ATUALIZAR EXERCÍCIO:", error);
-        res.status(500).json({ error: 'Erro ao atualizar o exercício.' });
-    }
-});
-// Alterar Senha do Utilizador
-app.put('/users/:id/password', async (req, res) => {
-    const { id } = req.params;
-    const { novaSenha } = req.body;
-
-    try {
-        if (typeof novaSenha !== 'string' || novaSenha.trim().length < 6) {
-            return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
-        }
-
-        const hashSenha = await bcrypt.hash(novaSenha, BCRYPT_ROUNDS);
-
-        await prisma.user.update({
-            where: { id: id },
-            data: { senha: hashSenha }
-        });
-        res.json({ message: 'Senha atualizada com sucesso!' });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Erro ao atualizar a senha.' });
-    }
-});
-
-// Excluir Série Específica (Correção durante o treino)
-app.delete('/logs/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        await prisma.workoutLog.delete({
-            where: { id: id }
-        });
-        res.json({ message: 'Série excluída com sucesso.' });
-    } catch (error) {
-        console.error("Erro ao excluir série:", error);
-        res.status(500).json({ error: 'Erro ao excluir série.' });
-    }
-});
-// Rota para excluir um exercício e todo o seu histórico
-app.delete('/exercises/:id', async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        // 1º passo: Apaga todo o histórico de treinos desse exercício
-        await prisma.workoutLog.deleteMany({
-            where: { exerciseId: Number(id) }
-        });
-
-        // 2º passo: Apaga o exercício
-        await prisma.exercise.delete({
-            where: { id: Number(id) }
-        });
-
-        res.json({ message: 'Exercício e histórico excluídos com sucesso' });
-    } catch (error) {
-        console.error("ERRO AO EXCLUIR EXERCÍCIO:", error);
-        res.status(500).json({ error: 'Erro ao excluir o exercício.' });
-    }
-});
-
-// Registrar novo peso
-app.post('/weight', async (req, res) => {
-    const { userId, peso } = req.body;
     try {
         const log = await prisma.weightLog.create({
-            data: { userId, peso: Number(peso) }
+            data: { userId: req.userId!, peso: parsedPeso }
         });
-        // Atualiza também o peso mais recente no perfil do usuário
         await prisma.user.update({
-            where: { id: userId },
-            data: { pesoAtual: Number(peso) }
+            where: { id: req.userId },
+            data: { pesoAtual: parsedPeso }
         });
         res.status(201).json(log);
     } catch (error) {
@@ -431,11 +537,12 @@ app.post('/weight', async (req, res) => {
     }
 });
 
-// Buscar histórico de peso do usuário
-app.get('/weight/:userId', async (req, res) => {
+app.get('/weight/:userId', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.userId))) return;
+
     try {
         const history = await prisma.weightLog.findMany({
-            where: { userId: req.params.userId },
+            where: { userId: req.userId },
             orderBy: { data: 'asc' }
         });
         res.json(history);
@@ -444,32 +551,32 @@ app.get('/weight/:userId', async (req, res) => {
     }
 });
 
-// Excluir registro de peso incorreto
-app.delete('/weight/:id', async (req, res) => {
+app.delete('/weight/:id', async (req: AuthRequest, res) => {
+    const id = parsePositiveInt(routeParam(req.params.id));
+    if (!id) return res.status(400).json({ error: 'Registro inválido.' });
+
     try {
-        await prisma.weightLog.delete({
-            where: { id: Number(req.params.id) }
-        });
-        res.json({ message: 'Registro de peso excluído' });
+        const result = await prisma.weightLog.deleteMany({ where: { id, userId: req.userId } });
+        if (!result.count) return res.status(403).json({ error: 'Acesso negado.' });
+        res.json({ message: 'Registro de peso excluído.' });
     } catch (error) {
         res.status(500).json({ error: 'Erro ao excluir peso.' });
     }
 });
 
-// Buscar Frequência (Ignora treinos vazios ou abandonados)
-app.get('/logs/frequency/:userId', async (req, res) => {
-    const { userId } = req.params;
+app.get('/logs/frequency/:userId', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.userId))) return;
+
     try {
         const sessions = await prisma.workoutSession.findMany({
             where: {
-                userId,
-                endTime: { not: null }, // O treino tem de ter sido finalizado
-                logs: { some: {} }      // Tem de ter pelo menos 1 série registada
+                userId: req.userId,
+                endTime: { not: null },
+                logs: { some: {} }
             },
             select: { startTime: true }
         });
 
-        // Devolve as datas exatas
         res.json(sessions.map(s => s.startTime.toISOString()));
     } catch (error) {
         console.error(error);
@@ -477,52 +584,36 @@ app.get('/logs/frequency/:userId', async (req, res) => {
     }
 });
 
-// === ROTAS DE SESSÃO DE TREINO (RELATÓRIO) ===
-
-// Iniciar Treino (agora com Retomada Automática)
-app.post('/sessions/start', async (req, res) => {
-    const { userId } = req.body;
+app.post('/sessions/start', async (req: AuthRequest, res) => {
     try {
-        // 1. Procura se já existe um treino "preso" (sem horário de fim)
         const openSession = await prisma.workoutSession.findFirst({
-            where: { userId, endTime: null },
-            include: { logs: true } // Já puxa as séries que você tinha feito
+            where: { userId: req.userId, endTime: null },
+            include: { logs: true }
         });
 
-        // 2. Se encontrar, ele não dá erro! Ele DEVOLVE o treino pra você continuar.
-        if (openSession) {
-            return res.json(openSession);
-        }
+        if (openSession) return res.json(openSession);
 
-        // 3. Se não encontrar nada aberto, aí sim cria um novinho em folha.
         const newSession = await prisma.workoutSession.create({
-            data: { userId }
+            data: { userId: req.userId! }
         });
         res.json(newSession);
-
     } catch (error) {
         console.error(error);
         res.status(400).json({ error: 'Erro ao iniciar sessão.' });
     }
 });
 
-// 2. Finalizar treino atual (Calcula tempo e calorias)
-app.put('/sessions/end', async (req, res) => {
-    const { userId } = req.body;
+app.put('/sessions/end', async (req: AuthRequest, res) => {
     try {
         const session = await prisma.workoutSession.findFirst({
-            where: { userId, endTime: null }
+            where: { userId: req.userId, endTime: null }
         });
         if (!session) return res.status(404).json({ error: 'Nenhuma sessão ativa encontrada.' });
 
         const endTime = new Date();
         const durationMin = (endTime.getTime() - session.startTime.getTime()) / (1000 * 60);
-
-        // Busca peso do usuário para calcular caloria
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        const peso = user?.pesoAtual || 70; // Default 70kg se não tiver
-
-        // Fórmula Simples: MET Musculação (aprox 5.0) * Peso * Tempo(h)
+        const user = await prisma.user.findUnique({ where: { id: req.userId } });
+        const peso = user?.pesoAtual || 70;
         const caloriasEstimadas = (5.0 * peso * (durationMin / 60));
 
         const updatedSession = await prisma.workoutSession.update({
@@ -537,72 +628,69 @@ app.put('/sessions/end', async (req, res) => {
         res.status(500).json({ error: 'Erro ao finalizar treino.' });
     }
 });
-// 4. Excluir uma Sessão de Treino inteira
-app.delete('/sessions/:id', async (req, res) => {
-    const { id } = req.params;
+
+app.delete('/sessions/:id', async (req: AuthRequest, res) => {
+    const id = routeParam(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Sessão inválida.' });
+
     try {
-        // 1º passo: Apaga todos os logs vinculados a esta sessão para não deixar dados órfãos
-        await prisma.workoutLog.deleteMany({
-            where: { sessionId: id }
-        });
+        const session = await prisma.workoutSession.findFirst({ where: { id, userId: req.userId } });
+        if (!session) return res.status(403).json({ error: 'Acesso negado.' });
 
-        // 2º passo: Apaga a sessão do calendário
-        await prisma.workoutSession.delete({
-            where: { id }
-        });
+        await prisma.$transaction([
+            prisma.workoutLog.deleteMany({ where: { sessionId: id, userId: req.userId } }),
+            prisma.workoutSession.delete({ where: { id } })
+        ]);
 
-        res.json({ message: 'Sessão e séries excluídas com sucesso' });
+        res.json({ message: 'Sessão e séries excluídas com sucesso.' });
     } catch (error) {
-        console.error("ERRO AO EXCLUIR SESSÃO:", error);
+        console.error('ERRO AO EXCLUIR SESSÃO:', error);
         res.status(500).json({ error: 'Erro ao excluir a sessão.' });
     }
 });
-// 3. Buscar Relatório Detalhado de um dia específico (AGORA SUPORTA MÚLTIPLOS)
-app.get('/reports/:userId/:date', async (req, res) => {
-    const { userId, date } = req.params; // date no formato YYYY-MM-DD
+
+app.get('/reports/:userId/:date', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.userId))) return;
+    const { date } = req.params;
+
     try {
         const startOfDay = new Date(`${date}T00:00:00.000Z`);
         const endOfDay = new Date(`${date}T23:59:59.999Z`);
 
-        // Busca TODAS as sessões finalizadas daquele dia
         const sessions = await prisma.workoutSession.findMany({
             where: {
-                userId,
+                userId: req.userId,
                 startTime: { gte: startOfDay, lte: endOfDay },
                 endTime: { not: null }
             },
             include: {
                 logs: { include: { exercise: true } }
             },
-            orderBy: { startTime: 'asc' } // Ordena do mais cedo para o mais tarde
+            orderBy: { startTime: 'asc' }
         });
 
-        res.json(sessions); // Retorna a lista de sessões
+        res.json(sessions);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Erro ao buscar relatório.' });
     }
 });
 
-// 5. Buscar Volume Total de Carga (Últimos 7 Treinos)
-app.get('/volume/:userId', async (req, res) => {
-    const { userId } = req.params;
+app.get('/volume/:userId', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.userId))) return;
+
     try {
         const sessions = await prisma.workoutSession.findMany({
-            where: { userId, endTime: { not: null } },
+            where: { userId: req.userId, endTime: { not: null } },
             include: { logs: true },
             orderBy: { startTime: 'asc' },
-            take: 7 // Pega apenas os últimos 7 treinos finalizados
+            take: 7
         });
 
-        const volumeData = sessions.map(session => {
-            // Faz a conta: Carga * Repetições para cada série e soma tudo
-            const totalVolume = session.logs.reduce((acc, log) => acc + (log.carga * log.repsFeitas), 0);
-            return {
-                data: session.startTime.toISOString(),
-                volume: totalVolume
-            };
-        });
+        const volumeData = sessions.map(session => ({
+            data: session.startTime.toISOString(),
+            volume: session.logs.reduce((acc, log) => acc + (log.carga * log.repsFeitas), 0)
+        }));
 
         res.json(volumeData);
     } catch (error) {
@@ -611,32 +699,19 @@ app.get('/volume/:userId', async (req, res) => {
     }
 });
 
-// 6. Buscar Último Treino por Exercício (O "Fantasma")
-app.get('/logs/last/:userId', async (req, res) => {
-    const { userId } = req.params;
+app.get('/logs/last/:userId', async (req: AuthRequest, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.userId))) return;
+
     try {
         const lastLogs = await prisma.workoutLog.findMany({
-            where: { userId },
-            orderBy: { id: 'desc' }, // Pega do mais recente para o mais antigo
-            distinct: ['exerciseId'], // Pega apenas a última aparição de cada exercício
+            where: { userId: req.userId },
+            orderBy: { id: 'desc' },
+            distinct: ['exerciseId']
         });
         res.json(lastLogs);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Erro ao buscar histórico fantasma.' });
-    }
-});
-// 7. Excluir uma série registrada por engano
-app.delete('/logs/:logId', async (req, res) => {
-    const { logId } = req.params;
-    try {
-        await prisma.workoutLog.delete({
-            where: { id: logId }
-        });
-        res.json({ message: 'Série removida com sucesso' });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Erro ao remover série.' });
     }
 });
 

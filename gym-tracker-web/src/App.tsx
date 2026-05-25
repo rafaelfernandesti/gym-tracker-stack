@@ -331,6 +331,7 @@ export default function App() {
   // Formulários
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [profileName, setProfileName] = useState('');
   const [profilePhoto, setProfilePhoto] = useState('');
@@ -361,6 +362,16 @@ export default function App() {
   const closeConfirm = (value: boolean) => {
     confirmState?.resolve(value);
     setConfirmState(null);
+  };
+
+  const authFetch = (path: string, options: RequestInit = {}) => {
+    const headers = new Headers(options.headers);
+    if (user?.token) headers.set('Authorization', `Bearer ${user.token}`);
+
+    return fetch(`${API_URL}${path}`, {
+      ...options,
+      headers
+    });
   };
 
   const checkServerAwake = async (showSuccessToast = false) => {
@@ -400,7 +411,15 @@ export default function App() {
 
   useEffect(() => {
     const saved = localStorage.getItem('@GymTracker:user');
-    if (saved) setUser(JSON.parse(saved));
+    if (saved) {
+      const parsedUser = JSON.parse(saved);
+      if (parsedUser?.token) {
+        setUser(parsedUser);
+      } else {
+        localStorage.removeItem('@GymTracker:user');
+        localStorage.removeItem('@GymTracker:activeSession');
+      }
+    }
 
     const sessao = localStorage.getItem('@GymTracker:activeSession');
     if (sessao) {
@@ -551,12 +570,12 @@ export default function App() {
     }, 1800);
     try {
       const [libRes, planRes, weightRes, freqRes, volRes, lastRes] = await Promise.all([
-        fetch(`${API_URL}/exercises/${user.id}`),
-        fetch(`${API_URL}/plans/${user.id}`),
-        fetch(`${API_URL}/weight/${user.id}`),
-        fetch(`${API_URL}/logs/frequency/${user.id}`),
-        fetch(`${API_URL}/volume/${user.id}`),
-        fetch(`${API_URL}/logs/last/${user.id}`)
+        authFetch(`/exercises/${user.id}`),
+        authFetch(`/plans/${user.id}`),
+        authFetch(`/weight/${user.id}`),
+        authFetch(`/logs/frequency/${user.id}`),
+        authFetch(`/volume/${user.id}`),
+        authFetch(`/logs/last/${user.id}`)
       ]);
       if (libRes.ok) setLibrary(await libRes.json());
       if (planRes.ok) setMyPlans(await planRes.json());
@@ -610,21 +629,23 @@ export default function App() {
   };
   const handleMudarSenha = async (e: any) => {
     e.preventDefault();
-    if (!novaSenha || isChangingPassword) return;
+    if (!senhaAtual || !novaSenha || isChangingPassword) return;
 
     setIsChangingPassword(true);
     try {
-      const res = await fetch(`${API_URL}/users/${user.id}/password`, {
+      const res = await authFetch(`/users/${user.id}/password`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ novaSenha })
+        body: JSON.stringify({ senhaAtual, novaSenha })
       });
 
       if (res.ok) {
         showToast("Senha atualizada com sucesso.", 'success');
+        setSenhaAtual('');
         setNovaSenha('');
       } else {
-        showToast("Erro ao tentar atualizar a senha.", 'error');
+        const data = await res.json().catch(() => null);
+        showToast(data?.error || "Erro ao tentar atualizar a senha.", 'error');
       }
     } catch (e) {
       showToast("Erro ao tentar atualizar a senha.", 'error');
@@ -639,7 +660,7 @@ export default function App() {
 
     setIsSavingProfile(true);
     try {
-      const res = await fetch(`${API_URL}/users/${user.id}/profile`, {
+      const res = await authFetch(`/users/${user.id}/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -668,10 +689,10 @@ export default function App() {
     if (isStartingWorkout) return;
     setIsStartingWorkout(true);
     try {
-      const res = await fetch(`${API_URL}/sessions/start`, {
+      const res = await authFetch('/sessions/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id })
+        body: JSON.stringify({})
       });
       if (res.ok) {
         const data = await res.json();
@@ -703,11 +724,10 @@ export default function App() {
 
     setAddingSeries(prev => ({ ...prev, [exId]: true }));
     try {
-      const res = await fetch(`${API_URL}/logs`, {
+      const res = await authFetch('/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: user.id,
           exerciseId: exId,
           carga: c,
           repsFeitas: r,
@@ -768,7 +788,7 @@ export default function App() {
     // Manda a ordem silenciosa para a API apagar no banco
     setDeletingSeries(prev => ({ ...prev, [key]: true }));
     try {
-      const res = await fetch(`${API_URL}/logs/${logId}`, { method: 'DELETE' });
+      const res = await authFetch(`/logs/${logId}`, { method: 'DELETE' });
       if (res.ok) showToast('Série excluída.', 'success');
       else showToast('A série saiu da tela, mas a API não confirmou a exclusão.', 'error');
     } catch (e) {
@@ -789,10 +809,10 @@ export default function App() {
     if (!confirmed) return;
     setIsEndingWorkout(true);
     try {
-      const res = await fetch(`${API_URL}/sessions/end`, {
+      const res = await authFetch('/sessions/end', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id })
+        body: JSON.stringify({})
       });
       if (res.ok) {
         const sessionFinalizada = await res.json();
@@ -830,7 +850,7 @@ export default function App() {
     // Deleta a sessão diretamente do banco de dados
     setIsCancellingWorkout(true);
     try {
-      const res = await fetch(`${API_URL}/sessions/${activeSession.id}`, { method: 'DELETE' });
+      const res = await authFetch(`/sessions/${activeSession.id}`, { method: 'DELETE' });
 
       if (res.ok) {
         setActiveSession(null);
@@ -855,10 +875,10 @@ export default function App() {
     if (addingPlanKey) return;
     setAddingPlanKey(key);
     try {
-      const res = await fetch(`${API_URL}/plans`, {
+      const res = await authFetch('/plans', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, exerciseId: exId, ficha })
+        body: JSON.stringify({ exerciseId: exId, ficha })
       });
       if (res.ok) {
         await fetchData();
@@ -884,7 +904,7 @@ export default function App() {
     if (!confirmed) return;
     setMutatingPlans(prev => ({ ...prev, [id]: true }));
     try {
-      const res = await fetch(`${API_URL}/plans/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`/plans/${id}`, { method: 'DELETE' });
       if (res.ok) {
         await fetchData();
         showToast('Exercício removido da ficha.', 'success');
@@ -902,7 +922,7 @@ export default function App() {
     if (mutatingPlans[id]) return;
     setMutatingPlans(prev => ({ ...prev, [id]: true }));
     try {
-      const res = await fetch(`${API_URL}/plans/${id}`, {
+      const res = await authFetch(`/plans/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ seriesAlvo })
@@ -922,10 +942,10 @@ export default function App() {
     if (!novoExNome || isCreatingExercise) return;
     setIsCreatingExercise(true);
     try {
-      const res = await fetch(`${API_URL}/exercises`, {
+      const res = await authFetch('/exercises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: novoExNome, grupoMuscular: novoExGrupo, userId: user.id })
+        body: JSON.stringify({ nome: novoExNome, grupoMuscular: novoExGrupo })
       });
       if (res.ok) {
         await fetchData();
@@ -951,7 +971,7 @@ export default function App() {
     if (!confirmed) return;
     setDeletingExerciseId(id);
     try {
-      const res = await fetch(`${API_URL}/exercises/${id}/${user.id}`, { method: 'DELETE' });
+      const res = await authFetch(`/exercises/${id}/${user.id}`, { method: 'DELETE' });
       if (res.ok) {
         await fetchData();
         showToast('Exercício excluído.', 'success');
@@ -969,10 +989,10 @@ export default function App() {
     if (!novoPeso || isSavingWeight) return;
     setIsSavingWeight(true);
     try {
-      const res = await fetch(`${API_URL}/weight`, {
+      const res = await authFetch('/weight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, peso: Number(novoPeso) })
+        body: JSON.stringify({ peso: Number(novoPeso) })
       });
       if (res.ok) {
         await fetchData();
@@ -992,7 +1012,7 @@ export default function App() {
     if (reportLoadingDate) return;
     setReportLoadingDate(date);
     try {
-      const res = await fetch(`${API_URL}/reports/${user.id}/${date}`);
+      const res = await authFetch(`/reports/${user.id}/${date}`);
       if (res.ok) {
         const reports = await res.json();
         if (reports.length === 1) {
@@ -1699,13 +1719,20 @@ export default function App() {
                 <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-2">Segurança</p>
                 <input
                   type="password"
+                  placeholder="Senha atual"
+                  className="w-full bg-gray-800 p-4 rounded-xl border border-gray-700 outline-none text-sm focus:border-blue-500 transition-colors"
+                  value={senhaAtual}
+                  onChange={e => setSenhaAtual(e.target.value)}
+                />
+                <input
+                  type="password"
                   placeholder="Digitar nova senha"
                   className="w-full bg-gray-800 p-4 rounded-xl border border-gray-700 outline-none text-sm focus:border-blue-500 transition-colors"
                   value={novaSenha}
                   onChange={e => setNovaSenha(e.target.value)}
                 />
                 <button
-                  disabled={!novaSenha || isChangingPassword}
+                  disabled={!senhaAtual || !novaSenha || isChangingPassword}
                   className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
                 >
                   {isChangingPassword ? <LoadingIcon size={16} /> : <KeyRound size={16} />}
@@ -1853,7 +1880,7 @@ export default function App() {
               tone: 'danger'
             });
             if (confirmed) {
-              await fetch(`${API_URL}/sessions/${selectedReport.id}`, { method: 'DELETE' });
+              await authFetch(`/sessions/${selectedReport.id}`, { method: 'DELETE' });
               setSelectedReport(null);
               fetchData();
               showToast('Treino excluído.', 'success');

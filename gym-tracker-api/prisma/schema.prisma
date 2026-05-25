@@ -10,7 +10,7 @@ datasource db {
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
-  senha     String   @default("123456")
+  senha     String
   nome      String?
   foto      String?
   altura    Float?
