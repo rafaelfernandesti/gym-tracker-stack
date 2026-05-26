@@ -21,7 +21,7 @@ import {
   X
 } from 'lucide-react';
 
-const API_URL = "https://gym-tracker-api-yomc.onrender.com";
+const API_URL = import.meta.env.VITE_API_URL || "https://gym-tracker-api-yomc.onrender.com";
 
 const getUserDisplayName = (user: any) => {
   if (user?.nome?.trim()) return user.nome.trim();
