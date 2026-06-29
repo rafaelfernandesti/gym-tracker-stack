@@ -4,6 +4,7 @@ import { toBlob } from 'html-to-image';
 import {
   BicepsFlexed,
   CalendarCheck,
+  Camera,
   ChartLine,
   CheckCircle2,
   ClipboardList,
@@ -31,6 +32,41 @@ const getUserDisplayName = (user: any) => {
 const getUserInitials = (user: any) => {
   const base = user?.nome?.trim() || user?.email || 'GT';
   return base.substring(0, 2).toUpperCase();
+};
+
+const resizeProfilePhoto = (file: File) => {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const image = new Image();
+
+      image.onload = () => {
+        const maxSize = 512;
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+          reject(new Error('Canvas indisponivel.'));
+          return;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(image, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+
+      image.onerror = () => reject(new Error('Imagem invalida.'));
+      image.src = String(reader.result);
+    };
+
+    reader.onerror = () => reject(new Error('Nao foi possivel ler a imagem.'));
+    reader.readAsDataURL(file);
+  });
 };
 
 type Toast = {
@@ -782,6 +818,34 @@ export default function App() {
       showToast("Erro ao atualizar perfil.", 'error');
     } finally {
       setIsSavingProfile(false);
+    }
+  };
+
+  const handleProfilePhotoFile = async (e: any) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Escolha um arquivo de imagem.', 'error');
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      showToast('A foto precisa ter ate 8 MB.', 'error');
+      return;
+    }
+
+    try {
+      const resizedPhoto = await resizeProfilePhoto(file);
+      if (resizedPhoto.length > 950_000) {
+        showToast('Essa imagem ficou grande demais. Tente outra foto.', 'error');
+        return;
+      }
+      setProfilePhoto(resizedPhoto);
+    } catch (error) {
+      showToast('Nao foi possivel carregar essa foto.', 'error');
     }
   };
 
@@ -1811,8 +1875,8 @@ export default function App() {
           <div className="space-y-6 animate-in slide-in-from-bottom">
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg text-center">
               <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border-4 border-gray-700 mb-4 overflow-hidden">
-                {user.foto ? (
-                  <img src={user.foto} alt="Foto de perfil" crossOrigin="anonymous" className="w-full h-full object-cover" />
+                {profilePhoto ? (
+                  <img src={profilePhoto} alt="Foto de perfil" crossOrigin="anonymous" className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-2xl font-black text-gray-500">{getUserInitials(user)}</span>
                 )}
@@ -1829,16 +1893,43 @@ export default function App() {
                   value={profileName}
                   onChange={e => setProfileName(e.target.value)}
                 />
-                <input
-                  type="url"
-                  placeholder="https://sua-foto.jpg"
-                  className="w-full bg-gray-800 p-4 rounded-xl border border-gray-700 outline-none text-sm focus:border-blue-500 transition-colors"
-                  value={profilePhoto}
-                  onChange={e => setProfilePhoto(e.target.value)}
-                />
-                <p className="text-[11px] text-gray-500 leading-relaxed">
-                  Use uma imagem pública com CORS liberado para aparecer no compartilhamento do relatório.
-                </p>
+                <div className="rounded-2xl border border-gray-700 bg-gray-800 p-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-gray-700 bg-gray-900 text-lg font-black text-gray-500">
+                      {profilePhoto ? (
+                        <img src={profilePhoto} alt="Preview da foto" className="h-full w-full object-cover" />
+                      ) : (
+                        getUserInitials(user)
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">Foto de perfil</p>
+                      <div className="flex gap-2">
+                        <label className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-500 ${isSavingProfile ? 'pointer-events-none opacity-60' : ''}`}>
+                          <Camera size={15} />
+                          Escolher
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={isSavingProfile}
+                            onChange={handleProfilePhotoFile}
+                          />
+                        </label>
+                        {profilePhoto && (
+                          <button
+                            type="button"
+                            disabled={isSavingProfile}
+                            onClick={() => setProfilePhoto('')}
+                            className="rounded-xl border border-gray-700 bg-gray-900 px-3 text-xs font-black uppercase tracking-widest text-gray-400 transition-colors hover:text-white disabled:opacity-50"
+                          >
+                            Remover
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <button
                   disabled={isSavingProfile}
                   className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors shadow-lg shadow-green-500/20 flex items-center justify-center gap-2"
