@@ -435,6 +435,26 @@ app.put('/users/:id/password', async (req, res) => {
         res.status(500).json({ error: 'Erro ao atualizar a senha.' });
     }
 });
+app.delete('/users/:id', async (req, res) => {
+    if (!requireSameUserParam(req, res, routeParam(req.params.id)))
+        return;
+    try {
+        await prisma.$transaction([
+            prisma.workoutLog.deleteMany({ where: { userId: req.userId } }),
+            prisma.workoutSession.deleteMany({ where: { userId: req.userId } }),
+            prisma.workoutPlan.deleteMany({ where: { userId: req.userId } }),
+            prisma.weightLog.deleteMany({ where: { userId: req.userId } }),
+            prisma.passwordResetToken.deleteMany({ where: { userId: req.userId } }),
+            prisma.exercise.deleteMany({ where: { userId: req.userId } }),
+            prisma.user.delete({ where: { id: req.userId } })
+        ]);
+        res.json({ message: 'Conta e dados excluídos com sucesso.' });
+    }
+    catch (error) {
+        console.error('ERRO AO EXCLUIR CONTA:', error);
+        res.status(500).json({ error: 'Erro ao excluir a conta.' });
+    }
+});
 app.get('/plans/:userId', async (req, res) => {
     if (!requireSameUserParam(req, res, routeParam(req.params.userId)))
         return;

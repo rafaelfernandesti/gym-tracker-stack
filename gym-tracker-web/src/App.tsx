@@ -377,6 +377,7 @@ export default function App() {
   const [profileName, setProfileName] = useState('');
   const [profilePhoto, setProfilePhoto] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [novoExNome, setNovoExNome] = useState('');
   const [novoExGrupo, setNovoExGrupo] = useState('Peito');
   const [novoPeso, setNovoPeso] = useState('');
@@ -848,6 +849,40 @@ export default function App() {
       setProfilePhoto(resizedPhoto);
     } catch (error) {
       showToast('Nao foi possivel carregar essa foto.', 'error');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user || isDeletingAccount) return;
+
+    const confirmed = await askConfirm({
+      title: 'Excluir conta?',
+      message: 'Sua conta, fichas, histórico de treinos, registros de peso e exercícios personalizados serão apagados permanentemente.',
+      confirmLabel: 'Excluir',
+      tone: 'danger'
+    });
+    if (!confirmed) return;
+
+    setIsDeletingAccount(true);
+    try {
+      const res = await authFetch(`/users/${user.id}`, { method: 'DELETE' });
+
+      if (res.ok) {
+        localStorage.removeItem('@GymTracker:user');
+        localStorage.removeItem('@GymTracker:activeSession');
+        setUser(null);
+        setActiveSession(null);
+        setCurrentLogs([]);
+        stopRestTimer();
+        showToast('Conta excluída com sucesso.', 'success');
+      } else {
+        const data = await res.json().catch(() => null);
+        showToast(data?.error || 'Não foi possível excluir a conta.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível excluir a conta.', 'error');
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -2124,6 +2159,22 @@ export default function App() {
                   {isChangingPassword ? 'Atualizando...' : 'Atualizar Senha'}
                 </button>
               </form>
+
+              <div className="mb-8 space-y-3 rounded-2xl border border-red-500/30 bg-red-950/20 p-4 text-left">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-red-300">Zona de risco</p>
+                <p className="text-xs leading-relaxed text-red-100/80">
+                  Exclui permanentemente sua conta, fichas, histórico de treinos, registros de peso e exercícios personalizados.
+                </p>
+                <button
+                  type="button"
+                  disabled={isDeletingAccount}
+                  onClick={handleDeleteAccount}
+                  className="w-full rounded-xl border border-red-500/40 bg-gray-950 px-4 py-4 text-xs font-black uppercase tracking-widest text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isDeletingAccount ? <LoadingIcon size={16} /> : <Trash2 size={16} />}
+                  {isDeletingAccount ? 'Excluindo...' : 'Excluir Conta'}
+                </button>
+              </div>
 
               <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-gray-900 border border-red-500/30 text-red-500 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2">
                 <LogOut size={16} />
