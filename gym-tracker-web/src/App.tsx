@@ -1904,8 +1904,8 @@ export default function App() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">Foto de perfil</p>
-                      <div className="flex gap-2">
-                        <label className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-500 ${isSavingProfile ? 'pointer-events-none opacity-60' : ''}`}>
+                      <div className="grid gap-2">
+                        <label className={`flex min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-500 ${isSavingProfile ? 'pointer-events-none opacity-60' : ''}`}>
                           <Camera size={15} />
                           Escolher
                           <input
@@ -1921,7 +1921,7 @@ export default function App() {
                             type="button"
                             disabled={isSavingProfile}
                             onClick={() => setProfilePhoto('')}
-                            className="rounded-xl border border-gray-700 bg-gray-900 px-3 text-xs font-black uppercase tracking-widest text-gray-400 transition-colors hover:text-white disabled:opacity-50"
+                            className="w-full rounded-xl border border-gray-700 bg-gray-900 px-3 py-3 text-xs font-black uppercase tracking-widest text-gray-400 transition-colors hover:text-white disabled:opacity-50"
                           >
                             Remover
                           </button>
