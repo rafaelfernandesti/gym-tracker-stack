@@ -563,11 +563,17 @@ app.post('/plans', async (req: AuthRequest, res) => {
         });
         if (!exercise) return res.status(403).json({ error: 'Exercício indisponível para este usuário.' });
 
+        const fichaNormalizada = ficha.toUpperCase();
+        const ordem = await prisma.workoutPlan.count({
+            where: { userId: req.userId, ficha: fichaNormalizada }
+        });
+
         const plan = await prisma.workoutPlan.create({
             data: {
                 userId: req.userId!,
                 exerciseId: parsedExerciseId,
-                ficha: ficha.toUpperCase()
+                ficha: fichaNormalizada,
+                ordem
             }
         });
         res.status(201).json(plan);

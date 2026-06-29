@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Flame,
+  GripVertical,
   KeyRound,
   LoaderCircle,
   LogOut,
@@ -365,6 +366,7 @@ export default function App() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [reportLoadingDate, setReportLoadingDate] = useState('');
   const [isSharingReport, setIsSharingReport] = useState(false);
+  const [draggedPlanId, setDraggedPlanId] = useState<number | null>(null);
 
   // Formulários
   const [email, setEmail] = useState('');
@@ -1101,6 +1103,74 @@ export default function App() {
     }
   };
 
+  const persistPlanOrder = async (orderedPlans: any[]) => {
+    const updates = orderedPlans.map((plan, index) => ({
+      id: plan.id,
+      ordem: index
+    }));
+
+    try {
+      const res = await authFetch('/plans/reorder', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates })
+      });
+
+      if (!res.ok) {
+        showToast('Não foi possível salvar a nova ordem.', 'error');
+        fetchData();
+      }
+    } catch (e) {
+      showToast('Não foi possível salvar a nova ordem.', 'error');
+      fetchData();
+    }
+  };
+
+  const handlePlanDrop = (targetPlanId: number) => {
+    if (!draggedPlanId || draggedPlanId === targetPlanId) {
+      setDraggedPlanId(null);
+      return;
+    }
+
+    const currentFichaPlans = myPlans
+      .filter(plan => plan.ficha === fichaAtiva)
+      .sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    const fromIndex = currentFichaPlans.findIndex(plan => plan.id === draggedPlanId);
+    const toIndex = currentFichaPlans.findIndex(plan => plan.id === targetPlanId);
+
+    if (fromIndex < 0 || toIndex < 0) {
+      setDraggedPlanId(null);
+      return;
+    }
+
+    const reorderedFichaPlans = [...currentFichaPlans];
+    const [movedPlan] = reorderedFichaPlans.splice(fromIndex, 1);
+    reorderedFichaPlans.splice(toIndex, 0, movedPlan);
+
+    const reorderedIds = new Map(reorderedFichaPlans.map((plan, index) => [plan.id, index]));
+    setMyPlans(prevPlans => prevPlans.map(plan =>
+      plan.ficha === fichaAtiva && reorderedIds.has(plan.id)
+        ? { ...plan, ordem: reorderedIds.get(plan.id) }
+        : plan
+    ));
+
+    persistPlanOrder(reorderedFichaPlans);
+    setDraggedPlanId(null);
+  };
+
+  const handlePlanPointerDrop = (clientX: number, clientY: number) => {
+    const targetElement = document
+      .elementFromPoint(clientX, clientY)
+      ?.closest('[data-plan-id]') as HTMLElement | null;
+    const targetPlanId = Number(targetElement?.dataset.planId);
+
+    if (targetPlanId) {
+      handlePlanDrop(targetPlanId);
+    } else {
+      setDraggedPlanId(null);
+    }
+  };
+
   const handleCreateCustomExercise = async (e: any) => {
     e.preventDefault();
     if (!novoExNome || isCreatingExercise) return;
@@ -1421,10 +1491,40 @@ export default function App() {
 
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-2 scrollbar-hide">
                   {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
-                    <div key={p.id} className="bg-gray-900 p-4 rounded-2xl border border-gray-800 relative overflow-hidden transition-all flex justify-between items-center">
-                      <div>
+                    <div
+                      key={p.id}
+                      data-plan-id={p.id}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => handlePlanDrop(p.id)}
+                      onDragEnd={() => setDraggedPlanId(null)}
+                      className={`bg-gray-900 p-4 rounded-2xl border relative overflow-hidden transition-all flex justify-between items-center ${draggedPlanId === p.id ? 'border-blue-500 opacity-60' : 'border-gray-800'}`}
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <button
+                          type="button"
+                          draggable
+                          onPointerDown={(e) => {
+                            e.currentTarget.setPointerCapture(e.pointerId);
+                            setDraggedPlanId(p.id);
+                          }}
+                          onPointerUp={(e) => {
+                            e.currentTarget.releasePointerCapture(e.pointerId);
+                            handlePlanPointerDrop(e.clientX, e.clientY);
+                          }}
+                          onPointerCancel={() => setDraggedPlanId(null)}
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = 'move';
+                            setDraggedPlanId(p.id);
+                          }}
+                          className="touch-none cursor-grab rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-800 hover:text-white active:cursor-grabbing"
+                          aria-label="Arrastar exercício"
+                        >
+                          <GripVertical size={16} />
+                        </button>
+                        <div className="min-w-0">
                         <p className="font-bold text-white">{p.exercise.nome}</p>
                         <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{p.exercise.grupoMuscular}</p>
+                        </div>
                       </div>
 
                       {/* NOVA ÁREA DE CONTROLOS */}
@@ -1504,13 +1604,43 @@ export default function App() {
                     const emptySetsArray = Array.from({ length: remainingSets });
 
                     return (
-                      <div key={p.id} className="bg-gray-800 p-5 rounded-3xl border border-gray-700 shadow-xl overflow-hidden relative">
+                      <div
+                        key={p.id}
+                        data-plan-id={p.id}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => handlePlanDrop(p.id)}
+                        onDragEnd={() => setDraggedPlanId(null)}
+                        className={`bg-gray-800 p-5 rounded-3xl border shadow-xl overflow-hidden relative transition-all ${draggedPlanId === p.id ? 'border-blue-500 opacity-60' : 'border-gray-700'}`}
+                      >
 
                         {/* CABEÇALHO DO EXERCÍCIO COM A META */}
                         <div className="flex justify-between items-start mb-6">
-                          <div>
-                            <h3 className="font-black text-lg text-white leading-tight">{p.exercise.nome}</h3>
-                            <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">{p.exercise.grupoMuscular}</p>
+                          <div className="flex min-w-0 items-start gap-3">
+                            <button
+                              type="button"
+                              draggable
+                              onPointerDown={(e) => {
+                                e.currentTarget.setPointerCapture(e.pointerId);
+                                setDraggedPlanId(p.id);
+                              }}
+                              onPointerUp={(e) => {
+                                e.currentTarget.releasePointerCapture(e.pointerId);
+                                handlePlanPointerDrop(e.clientX, e.clientY);
+                              }}
+                              onPointerCancel={() => setDraggedPlanId(null)}
+                              onDragStart={(e) => {
+                                e.dataTransfer.effectAllowed = 'move';
+                                setDraggedPlanId(p.id);
+                              }}
+                              className="mt-0.5 touch-none cursor-grab rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-900 hover:text-white active:cursor-grabbing"
+                              aria-label="Arrastar exercício"
+                            >
+                              <GripVertical size={17} />
+                            </button>
+                            <div className="min-w-0">
+                              <h3 className="font-black text-lg text-white leading-tight">{p.exercise.nome}</h3>
+                              <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">{p.exercise.grupoMuscular}</p>
+                            </div>
                           </div>
 
                           <div className="bg-gray-900 px-3 py-1.5 rounded-xl border border-gray-700 flex flex-col items-center shadow-inner">
@@ -1649,11 +1779,41 @@ export default function App() {
 
               <div className="space-y-3">
                 {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
-                  <div key={p.id} className="bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg relative overflow-hidden transition-all">
+                  <div
+                    key={p.id}
+                    data-plan-id={p.id}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => handlePlanDrop(p.id)}
+                    onDragEnd={() => setDraggedPlanId(null)}
+                    className={`bg-gray-900 p-4 rounded-2xl border shadow-lg relative overflow-hidden transition-all ${draggedPlanId === p.id ? 'border-blue-500 opacity-60' : 'border-gray-800'}`}
+                  >
                     <div className="flex w-full items-center justify-between gap-4">
-                      <div>
-                        <p className="font-bold text-white">{p.exercise.nome}</p>
-                        <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{p.exercise.grupoMuscular}</p>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <button
+                          type="button"
+                          draggable
+                          onPointerDown={(e) => {
+                            e.currentTarget.setPointerCapture(e.pointerId);
+                            setDraggedPlanId(p.id);
+                          }}
+                          onPointerUp={(e) => {
+                            e.currentTarget.releasePointerCapture(e.pointerId);
+                            handlePlanPointerDrop(e.clientX, e.clientY);
+                          }}
+                          onPointerCancel={() => setDraggedPlanId(null)}
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = 'move';
+                            setDraggedPlanId(p.id);
+                          }}
+                          className="touch-none cursor-grab rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-800 hover:text-white active:cursor-grabbing"
+                          aria-label="Arrastar exercício"
+                        >
+                          <GripVertical size={16} />
+                        </button>
+                        <div className="min-w-0">
+                          <p className="font-bold text-white">{p.exercise.nome}</p>
+                          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{p.exercise.grupoMuscular}</p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="flex flex-col items-center">
