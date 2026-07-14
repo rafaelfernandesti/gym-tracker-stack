@@ -376,6 +376,12 @@ export default function App() {
   const [isSavingWeight, setIsSavingWeight] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [reportLoadingDate, setReportLoadingDate] = useState('');
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const today = new Date();
+    today.setDate(1);
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
   const [isSharingReport, setIsSharingReport] = useState(false);
   const [draggedPlanId, setDraggedPlanId] = useState<number | null>(null);
 
@@ -1544,6 +1550,15 @@ export default function App() {
     const d = String(date.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }));
+  const currentMonthStart = new Date();
+  currentMonthStart.setDate(1);
+  currentMonthStart.setHours(0, 0, 0, 0);
+  const calendarMonthLabel = calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const calendarMonthStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+  const calendarStartWeekday = calendarMonthStart.getDay();
+  const daysInCalendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
+  const canGoNextMonth = calendarMonth.getTime() < currentMonthStart.getTime();
+
   let currentStreak = 0;
   for (let i = 0; i < 30; i++) {
     const d = new Date();
@@ -2262,31 +2277,51 @@ export default function App() {
             </div>
 
             <div className="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-lg mb-8">
-              <h3 className="text-sm font-bold text-gray-400 mb-4 uppercase tracking-widest text-center">Frequência Mensal</h3>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {Array.from({ length: 30 }).map((_, i) => {
-                  const d = new Date();
-                  d.setDate(d.getDate() - (29 - i));
-                  const ano = d.getFullYear();
-                  const mes = d.getMonth();
-                  const dia = d.getDate();
-                  const iso = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-
-                  const treinou = frequency.some((isoDateString: string) => {
-                    const dataTreino = new Date(isoDateString);
-                    return dataTreino.getFullYear() === ano &&
-                      dataTreino.getMonth() === mes &&
-                      dataTreino.getDate() === dia;
-                  });
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
+                <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400">Frequência Mensal</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                    className="rounded-2xl bg-gray-900 px-3 py-2 text-xs font-bold uppercase tracking-widest text-gray-300 transition hover:bg-gray-800"
+                  >
+                    Anterior
+                  </button>
+                  <span className="text-sm font-black text-white capitalize">{calendarMonthLabel}</span>
+                  <button
+                    type="button"
+                    disabled={!canGoNextMonth}
+                    onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                    className="rounded-2xl bg-gray-900 px-3 py-2 text-xs font-bold uppercase tracking-widest text-gray-300 transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Próximo
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-7 gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">
+                {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+                  <div key={day} className="text-center">{day}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-2">
+                {Array.from({ length: calendarStartWeekday }).map((_, idx) => (
+                  <div key={`empty-${idx}`} className="aspect-square rounded-lg bg-gray-900/40" />
+                ))}
+                {Array.from({ length: daysInCalendarMonth }).map((_, idx) => {
+                  const day = idx + 1;
+                  const date = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+                  const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                  const treinou = frequencySet.has(iso);
 
                   return (
                     <button
                       key={iso}
-                      disabled={!!reportLoadingDate}
+                      type="button"
+                      disabled={!treinou || !!reportLoadingDate}
                       onClick={() => treinou && handleOpenReport(iso)}
-                      className={`w-[11%] aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all disabled:cursor-wait ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'}`}
+                      className={`aspect-square rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${treinou ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : 'bg-gray-900 border border-gray-700 text-gray-600'} ${!treinou ? 'cursor-not-allowed' : ''}`}
                     >
-                      {reportLoadingDate === iso ? <LoadingIcon size={12} /> : dia}
+                      {reportLoadingDate === iso ? <LoadingIcon size={12} /> : day}
                     </button>
                   );
                 })}
