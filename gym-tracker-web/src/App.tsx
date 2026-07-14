@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || "https://gym-tracker-api-yomc.onrender.com";
+const APP_VERSION = __APP_VERSION__;
 
 const getUserDisplayName = (user: any) => {
   if (user?.nome?.trim()) return user.nome.trim();
@@ -327,6 +328,7 @@ export default function App() {
   // Dados Globais
   const [library, setLibrary] = useState<any[]>([]);
   const [myPlans, setMyPlans] = useState<any[]>([]);
+  const [workoutTemplates, setWorkoutTemplates] = useState<any[]>([]);
   const [activeSession, setActiveSession] = useState<any>(null);
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [daySessions, setDaySessions] = useState<any[] | null>(null);
@@ -360,6 +362,7 @@ export default function App() {
   const [deletingSeries, setDeletingSeries] = useState<Record<string, boolean>>({});
   const [mutatingPlans, setMutatingPlans] = useState<Record<number, boolean>>({});
   const [addingPlanKey, setAddingPlanKey] = useState('');
+  const [applyingTemplateId, setApplyingTemplateId] = useState('');
   const [isCreatingExercise, setIsCreatingExercise] = useState(false);
   const [deletingExerciseId, setDeletingExerciseId] = useState<number | null>(null);
   const [isSavingWeight, setIsSavingWeight] = useState(false);
@@ -518,6 +521,14 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
+    if (!myPlans.length) return;
+    const planDays = Array.from(new Set(myPlans.map(plan => plan.ficha))).filter(Boolean);
+    if (planDays.length && !planDays.includes(fichaAtiva)) {
+      setFichaAtiva(planDays[0]);
+    }
+  }, [myPlans, fichaAtiva]);
+
+  useEffect(() => {
     const requestWakeLock = async () => {
       try {
         if (!activeSession || !('wakeLock' in navigator) || document.hidden) return;
@@ -644,9 +655,10 @@ export default function App() {
       setServerStatus('slow');
     }, 1800);
     try {
-      const [libRes, planRes, weightRes, freqRes, volRes, lastRes] = await Promise.all([
+      const [libRes, planRes, templatesRes, weightRes, freqRes, volRes, lastRes] = await Promise.all([
         authFetch(`/exercises/${user.id}`),
         authFetch(`/plans/${user.id}`),
+        authFetch('/templates'),
         authFetch(`/weight/${user.id}`),
         authFetch(`/logs/frequency/${user.id}`),
         authFetch(`/volume/${user.id}`),
@@ -654,11 +666,12 @@ export default function App() {
       ]);
       if (libRes.ok) setLibrary(await libRes.json());
       if (planRes.ok) setMyPlans(await planRes.json());
+      if (templatesRes.ok) setWorkoutTemplates(await templatesRes.json());
       if (weightRes.ok) setWeightHistory(await weightRes.json());
       if (freqRes.ok) setFrequency(await freqRes.json());
       if (volRes.ok) setVolumeHistory(await volRes.json());
       if (lastRes.ok) setLastLogs(await lastRes.json());
-      if (![libRes, planRes, weightRes, freqRes, volRes, lastRes].every(res => res.ok)) {
+      if (![libRes, planRes, templatesRes, weightRes, freqRes, volRes, lastRes].every(res => res.ok)) {
         setDataError('Alguns dados não carregaram. Tente atualizar.');
       }
     } catch (e) {
@@ -1084,7 +1097,7 @@ export default function App() {
       if (res.ok) {
         await fetchData();
         setIsLibraryOpen(false);
-        showToast(`Exercício adicionado à Ficha ${ficha}.`, 'success');
+        showToast(`Exercício adicionado em ${ficha}.`, 'success');
       } else {
         showToast('Não foi possível adicionar o exercício.', 'error');
       }
@@ -1092,6 +1105,41 @@ export default function App() {
       showToast('Não foi possível adicionar o exercício.', 'error');
     } finally {
       setAddingPlanKey('');
+    }
+  };
+
+  const handleApplyTemplate = async (template: any) => {
+    if (applyingTemplateId) return;
+
+    const confirmed = await askConfirm({
+      title: `Usar ${template.nome}?`,
+      message: 'Seu plano atual será substituído por este template. O histórico de treinos já finalizados será preservado.',
+      confirmLabel: 'Usar template',
+      tone: 'success'
+    });
+    if (!confirmed) return;
+
+    setApplyingTemplateId(template.id);
+    try {
+      const res = await authFetch(`/templates/${template.id}/apply`, {
+        method: 'POST'
+      });
+      const data = await res.json().catch(() => null);
+
+      if (res.ok) {
+        const plans = data?.plans || [];
+        setMyPlans(plans);
+        if (plans[0]?.ficha) setFichaAtiva(plans[0].ficha);
+        setIsLibraryOpen(false);
+        showToast(`${template.nome} aplicado ao seu plano.`, 'success');
+        fetchData();
+      } else {
+        showToast(data?.error || 'Não foi possível aplicar o template.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível aplicar o template.', 'error');
+    } finally {
+      setApplyingTemplateId('');
     }
   };
 
@@ -1402,6 +1450,7 @@ export default function App() {
           {authMode !== 'auth' && (
             <button disabled={isAuthLoading} onClick={() => { setAuthMode('auth'); setResetToken(''); }} className="w-full mt-6 text-gray-400 text-sm hover:text-white transition-colors disabled:opacity-50">Voltar para login</button>
           )}
+          <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-widest text-gray-600">v{APP_VERSION}</p>
         </div>
       </div>
     );
@@ -1409,6 +1458,9 @@ export default function App() {
 
   const exerciciosAtuais = myPlans.filter(p => p.ficha === fichaAtiva).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   const customExercises = library.filter(ex => ex.userId === user.id);
+  const fichaOptions = myPlans.length
+    ? Array.from(new Set(myPlans.map(plan => plan.ficha))).filter(Boolean)
+    : ['A', 'B', 'C'];
   const totalSeriesPlanejadas = exerciciosAtuais.reduce((acc, plan) => acc + (plan.seriesAlvo || 3), 0);
   const totalSeriesFeitas = currentLogs.length;
   const navItems = [
@@ -1504,12 +1556,12 @@ export default function App() {
                 <div>
                   <p className="text-xs font-bold uppercase tracking-widest text-blue-400">Treino</p>
                   <h2 className="mt-1 text-2xl font-black">Qual o alvo de hoje?</h2>
-                  <p className="mt-1 text-sm text-gray-500">{exerciciosAtuais.length} exercícios programados na Ficha {fichaAtiva}</p>
+                  <p className="mt-1 text-sm text-gray-500">{exerciciosAtuais.length} exercícios programados em {fichaAtiva}</p>
                 </div>
 
-                <div className="flex gap-2 bg-gray-900 p-1 rounded-xl border border-gray-800">
-                  {['A', 'B', 'C'].map(f => (
-                    <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Ficha {f}</button>
+                <div className="flex gap-2 bg-gray-900 p-1 rounded-xl border border-gray-800 overflow-x-auto scrollbar-hide">
+                  {fichaOptions.map(f => (
+                    <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 min-w-24 px-3 py-3 rounded-lg font-bold transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>{f}</button>
                   ))}
                 </div>
 
@@ -1583,7 +1635,7 @@ export default function App() {
                     </div>
                   )) : (
                     <div className="text-center py-8 border border-dashed border-gray-700 rounded-2xl bg-gray-900/40">
-                      <p className="text-gray-500 text-sm">Ficha {fichaAtiva} vazia.</p>
+                      <p className="text-gray-500 text-sm">{fichaAtiva} vazio.</p>
                       <button onClick={() => setActiveTab('fichas')} className="text-blue-500 text-xs font-bold mt-2 uppercase">Ir para Fichas</button>
                     </div>
                   )}
@@ -1806,9 +1858,51 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl border border-gray-800">
-                {['A', 'B', 'C'].map(f => (
-                  <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Ficha {f}</button>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Templates prontos</h3>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-600">Substitui plano atual</span>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+                  {workoutTemplates.length > 0 ? workoutTemplates.map(template => (
+                    <div key={template.id} className="min-w-[260px] rounded-2xl border border-gray-800 bg-gray-900 p-4">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-base font-black text-white">{template.nome}</p>
+                          <p className="mt-1 text-xs font-bold uppercase tracking-widest text-blue-400">{template.frequencia}</p>
+                        </div>
+                        <span className="rounded-full border border-gray-700 bg-gray-950 px-2 py-1 text-[10px] font-bold uppercase text-gray-400">
+                          {template.nivel}
+                        </span>
+                      </div>
+                      <p className="min-h-10 text-sm leading-relaxed text-gray-400">{template.descricao}</p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {template.dias?.map((dia: any) => (
+                          <span key={dia.nome} className="rounded-full bg-gray-950 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                            {dia.nome} · {dia.exercicios}
+                          </span>
+                        ))}
+                      </div>
+                      <button
+                        disabled={!!applyingTemplateId}
+                        onClick={() => handleApplyTemplate(template)}
+                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {applyingTemplateId === template.id ? <LoadingIcon size={15} /> : <ClipboardList size={15} />}
+                        {applyingTemplateId === template.id ? 'Aplicando...' : 'Usar template'}
+                      </button>
+                    </div>
+                  )) : (
+                    <div className="w-full rounded-2xl border border-dashed border-gray-800 bg-gray-900/50 p-6 text-center text-sm text-gray-500">
+                      Templates serão exibidos quando o servidor carregar.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-xl border border-gray-800 overflow-x-auto scrollbar-hide">
+                {fichaOptions.map(f => (
+                  <button key={f} onClick={() => setFichaAtiva(f)} className={`flex-1 min-w-24 px-3 py-2 rounded-lg font-bold text-sm transition-colors ${fichaAtiva === f ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>{f}</button>
                 ))}
               </div>
 
@@ -1870,7 +1964,7 @@ export default function App() {
                   </div>
                 )) : (
                   <div className="text-center py-10 bg-gray-900/50 rounded-2xl border border-gray-800 border-dashed">
-                    <p className="text-gray-500">Nenhum exercício na Ficha {fichaAtiva}.</p>
+                    <p className="text-gray-500">Nenhum exercício em {fichaAtiva}.</p>
                     <button onClick={() => setIsLibraryOpen(true)} className="mt-3 text-xs font-black uppercase tracking-wider text-blue-400 inline-flex items-center gap-2">
                       <Plus size={14} />
                       Adicionar exercício
@@ -2077,7 +2171,8 @@ export default function App() {
                 )}
               </div>
               <h2 className="text-xl font-bold mb-1">{user.email}</h2>
-              <p className="text-gray-500 text-sm mb-8">Membro GymTracker</p>
+              <p className="text-gray-500 text-sm">Membro GymTracker</p>
+              <p className="mb-8 mt-2 text-[10px] font-bold uppercase tracking-widest text-gray-600">Versão {APP_VERSION}</p>
 
               <form onSubmit={handleUpdateProfile} className="mb-8 space-y-3 bg-gray-900 p-4 rounded-2xl border border-gray-700 text-left">
                 <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-2">Perfil</p>
@@ -2240,7 +2335,7 @@ export default function App() {
                         <div key={ex.id} className="bg-gray-800 p-4 rounded-2xl flex justify-between items-center border border-gray-700">
                           <span className="font-bold text-sm text-white">{ex.nome}</span>
                           <div className="flex gap-1">
-                            {['A', 'B', 'C'].map(f => (
+                            {fichaOptions.map(f => (
                               <button disabled={!!addingPlanKey} key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-wait">
                                 {addingPlanKey === `${ex.id}-${f}` ? <LoadingIcon size={12} /> : `+${f}`}
                               </button>
@@ -2278,7 +2373,7 @@ export default function App() {
                               <span className="text-[10px] text-gray-500 uppercase">{ex.grupoMuscular}</span>
                             </div>
                             <div className="flex items-center gap-3">
-                              {['A', 'B', 'C'].map(f => (
+                              {fichaOptions.map(f => (
                                 <button disabled={!!addingPlanKey || deletingExerciseId === ex.id} key={f} onClick={() => handleAddToPlan(ex.id, f)} className="bg-gray-900 border border-gray-700 px-2 py-1 rounded-lg text-[10px] font-black hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-wait">
                                   {addingPlanKey === `${ex.id}-${f}` ? <LoadingIcon size={12} /> : `+${f}`}
                                 </button>

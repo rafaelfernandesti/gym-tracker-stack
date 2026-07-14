@@ -116,6 +116,178 @@ const parsePositiveInt = (value) => {
     const parsed = Number(value);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
+const normalizeExerciseName = (value) => value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+const workoutTemplates = [
+    {
+        id: 'full-body-3x',
+        nome: 'Full Body 3x',
+        objetivo: 'Geral',
+        nivel: 'Iniciante',
+        frequencia: '3x/semana',
+        descricao: 'Plano simples para treinar o corpo todo com boa frequência semanal.',
+        dias: [
+            {
+                nome: 'Full Body A',
+                exercicios: [
+                    { nome: 'Agachamento Livre', seriesAlvo: 3 },
+                    { nome: 'Supino Reto (Barra)', seriesAlvo: 3 },
+                    { nome: 'Puxada Frontal (Aberta)', seriesAlvo: 3 },
+                    { nome: 'Desenvolvimento (Halteres)', seriesAlvo: 2 },
+                    { nome: 'Prancha Isométrica', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Full Body B',
+                exercicios: [
+                    { nome: 'Leg Press 45º', seriesAlvo: 3 },
+                    { nome: 'Supino Inclinado (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Remada Baixa (Triângulo)', seriesAlvo: 3 },
+                    { nome: 'Rosca Direta (Barra Reta)', seriesAlvo: 2 },
+                    { nome: 'Tríceps Pulley (Corda)', seriesAlvo: 2 }
+                ]
+            },
+            {
+                nome: 'Full Body C',
+                exercicios: [
+                    { nome: 'Stiff', seriesAlvo: 3 },
+                    { nome: 'Flexão de Braços', seriesAlvo: 3 },
+                    { nome: 'Remada Unilateral (Serrote)', seriesAlvo: 3 },
+                    { nome: 'Elevação Lateral (Halteres)', seriesAlvo: 2 },
+                    { nome: 'Abdominal Supra (Solo)', seriesAlvo: 3 }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'abc-geral',
+        nome: 'ABC Geral',
+        objetivo: 'Hipertrofia',
+        nivel: 'Intermediário',
+        frequencia: '3-6x/semana',
+        descricao: 'Divisão clássica para peito/tríceps, costas/bíceps e pernas/ombros.',
+        dias: [
+            {
+                nome: 'Peito e Tríceps',
+                exercicios: [
+                    { nome: 'Supino Reto (Barra)', seriesAlvo: 4 },
+                    { nome: 'Supino Inclinado (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Crossover (Polia Alta)', seriesAlvo: 3 },
+                    { nome: 'Tríceps Pulley (Barra Reta)', seriesAlvo: 3 },
+                    { nome: 'Tríceps Francês (Halter/Polia)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Costas e Bíceps',
+                exercicios: [
+                    { nome: 'Puxada Frontal (Aberta)', seriesAlvo: 4 },
+                    { nome: 'Remada Curvada (Barra)', seriesAlvo: 3 },
+                    { nome: 'Remada Baixa (Triângulo)', seriesAlvo: 3 },
+                    { nome: 'Rosca Direta (Barra W)', seriesAlvo: 3 },
+                    { nome: 'Rosca Martelo', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Pernas e Ombros',
+                exercicios: [
+                    { nome: 'Agachamento Livre', seriesAlvo: 4 },
+                    { nome: 'Leg Press 45º', seriesAlvo: 3 },
+                    { nome: 'Mesa Flexora', seriesAlvo: 3 },
+                    { nome: 'Desenvolvimento (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Elevação Lateral (Halteres)', seriesAlvo: 3 }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'ppl',
+        nome: 'Push Pull Legs',
+        objetivo: 'Geral',
+        nivel: 'Intermediário',
+        frequencia: '3-6x/semana',
+        descricao: 'Divisão eficiente para empurrar, puxar e pernas.',
+        dias: [
+            {
+                nome: 'Push',
+                exercicios: [
+                    { nome: 'Supino Reto (Halteres)', seriesAlvo: 4 },
+                    { nome: 'Desenvolvimento (Máquina)', seriesAlvo: 3 },
+                    { nome: 'Elevação Lateral (Polia)', seriesAlvo: 3 },
+                    { nome: 'Tríceps Pulley (Corda)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Pull',
+                exercicios: [
+                    { nome: 'Barra Fixa', seriesAlvo: 3 },
+                    { nome: 'Puxada Frontal (Triângulo)', seriesAlvo: 3 },
+                    { nome: 'Remada Unilateral (Serrote)', seriesAlvo: 3 },
+                    { nome: 'Rosca Alternada (Halteres)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Legs',
+                exercicios: [
+                    { nome: 'Agachamento Hack', seriesAlvo: 4 },
+                    { nome: 'Cadeira Extensora', seriesAlvo: 3 },
+                    { nome: 'Cadeira Flexora', seriesAlvo: 3 },
+                    { nome: 'Panturrilha em Pé (Máquina)', seriesAlvo: 4 }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'superior-inferior',
+        nome: 'Superior / Inferior',
+        objetivo: 'Geral',
+        nivel: 'Básico ao avançado',
+        frequencia: '4x/semana',
+        descricao: 'Alternância direta para evoluir mantendo descanso organizado.',
+        dias: [
+            {
+                nome: 'Superior A',
+                exercicios: [
+                    { nome: 'Supino Reto (Barra)', seriesAlvo: 4 },
+                    { nome: 'Puxada Frontal (Aberta)', seriesAlvo: 4 },
+                    { nome: 'Desenvolvimento (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Rosca Direta (Barra Reta)', seriesAlvo: 3 },
+                    { nome: 'Tríceps Pulley (Corda)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Inferior A',
+                exercicios: [
+                    { nome: 'Agachamento Livre', seriesAlvo: 4 },
+                    { nome: 'Leg Press 45º', seriesAlvo: 3 },
+                    { nome: 'Mesa Flexora', seriesAlvo: 3 },
+                    { nome: 'Panturrilha Sentado (Banco)', seriesAlvo: 4 }
+                ]
+            },
+            {
+                nome: 'Superior B',
+                exercicios: [
+                    { nome: 'Supino Inclinado (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Remada Baixa (Triângulo)', seriesAlvo: 4 },
+                    { nome: 'Elevação Lateral (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Rosca Martelo', seriesAlvo: 3 },
+                    { nome: 'Tríceps Testa (Barra W)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Inferior B',
+                exercicios: [
+                    { nome: 'Stiff', seriesAlvo: 4 },
+                    { nome: 'Afundo / Passada', seriesAlvo: 3 },
+                    { nome: 'Cadeira Extensora', seriesAlvo: 3 },
+                    { nome: 'Panturrilha no Leg Press', seriesAlvo: 4 }
+                ]
+            }
+        ]
+    }
+];
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4173,https://gym-tracker-web-yomc.onrender.com,https://gym-tracker-stack.vercel.app')
     .split(',')
     .map(origin => origin.trim())
@@ -453,6 +625,70 @@ app.delete('/users/:id', async (req, res) => {
     catch (error) {
         console.error('ERRO AO EXCLUIR CONTA:', error);
         res.status(500).json({ error: 'Erro ao excluir a conta.' });
+    }
+});
+app.get('/templates', async (_req, res) => {
+    res.json(workoutTemplates.map(template => ({
+        id: template.id,
+        nome: template.nome,
+        objetivo: template.objetivo,
+        nivel: template.nivel,
+        frequencia: template.frequencia,
+        descricao: template.descricao,
+        dias: template.dias.map(dia => ({
+            nome: dia.nome,
+            exercicios: dia.exercicios.length
+        }))
+    })));
+});
+app.post('/templates/:id/apply', async (req, res) => {
+    const templateId = routeParam(req.params.id);
+    const template = workoutTemplates.find(item => item.id === templateId);
+    if (!template)
+        return res.status(404).json({ error: 'Template não encontrado.' });
+    try {
+        const exerciseNames = Array.from(new Set(template.dias.flatMap(dia => dia.exercicios.map(exercicio => exercicio.nome))));
+        const globalExercises = await prisma.exercise.findMany({ where: { userId: null } });
+        const exerciseByName = new Map(globalExercises.map(exercise => [normalizeExerciseName(exercise.nome), exercise]));
+        for (const nome of exerciseNames) {
+            const key = normalizeExerciseName(nome);
+            if (!exerciseByName.has(key)) {
+                const created = await prisma.exercise.create({
+                    data: {
+                        nome,
+                        grupoMuscular: 'Geral',
+                        userId: null
+                    }
+                });
+                exerciseByName.set(key, created);
+            }
+        }
+        const createOperations = template.dias.flatMap(dia => dia.exercicios.map((item, index) => prisma.workoutPlan.create({
+            data: {
+                userId: req.userId,
+                exerciseId: exerciseByName.get(normalizeExerciseName(item.nome)).id,
+                ficha: dia.nome,
+                seriesAlvo: item.seriesAlvo,
+                ordem: index
+            },
+            include: { exercise: true }
+        })));
+        const [, ...createdPlans] = await prisma.$transaction([
+            prisma.workoutPlan.deleteMany({ where: { userId: req.userId } }),
+            ...createOperations
+        ]);
+        res.status(201).json({
+            message: 'Template aplicado com sucesso.',
+            template: {
+                id: template.id,
+                nome: template.nome
+            },
+            plans: createdPlans
+        });
+    }
+    catch (error) {
+        console.error('Erro ao aplicar template:', error);
+        res.status(500).json({ error: 'Erro ao aplicar template.' });
     }
 });
 app.get('/plans/:userId', async (req, res) => {
