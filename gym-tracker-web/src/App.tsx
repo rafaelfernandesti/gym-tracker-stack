@@ -8,6 +8,7 @@ import {
   ChartLine,
   CheckCircle2,
   ClipboardList,
+  Eye,
   Flame,
   GripVertical,
   KeyRound,
@@ -16,6 +17,7 @@ import {
   Plus,
   Save,
   Share2,
+  SlidersHorizontal,
   Trash2,
   Trophy,
   TrendingUp,
@@ -328,6 +330,7 @@ export default function App() {
   // Dados Globais
   const [library, setLibrary] = useState<any[]>([]);
   const [myPlans, setMyPlans] = useState<any[]>([]);
+  const [workoutPrograms, setWorkoutPrograms] = useState<any[]>([]);
   const [workoutTemplates, setWorkoutTemplates] = useState<any[]>([]);
   const [activeSession, setActiveSession] = useState<any>(null);
   const [selectedReport, setSelectedReport] = useState<any>(null);
@@ -363,6 +366,11 @@ export default function App() {
   const [mutatingPlans, setMutatingPlans] = useState<Record<number, boolean>>({});
   const [addingPlanKey, setAddingPlanKey] = useState('');
   const [applyingTemplateId, setApplyingTemplateId] = useState('');
+  const [activatingProgramId, setActivatingProgramId] = useState('');
+  const [templateObjectiveFilter, setTemplateObjectiveFilter] = useState('Todos');
+  const [templateDivisionFilter, setTemplateDivisionFilter] = useState('Todos');
+  const [templateFrequencyFilter, setTemplateFrequencyFilter] = useState('Todos');
+  const [previewTemplateId, setPreviewTemplateId] = useState('');
   const [isCreatingExercise, setIsCreatingExercise] = useState(false);
   const [deletingExerciseId, setDeletingExerciseId] = useState<number | null>(null);
   const [isSavingWeight, setIsSavingWeight] = useState(false);
@@ -655,9 +663,10 @@ export default function App() {
       setServerStatus('slow');
     }, 1800);
     try {
-      const [libRes, planRes, templatesRes, weightRes, freqRes, volRes, lastRes] = await Promise.all([
+      const [libRes, planRes, programsRes, templatesRes, weightRes, freqRes, volRes, lastRes] = await Promise.all([
         authFetch(`/exercises/${user.id}`),
         authFetch(`/plans/${user.id}`),
+        authFetch('/programs'),
         authFetch('/templates'),
         authFetch(`/weight/${user.id}`),
         authFetch(`/logs/frequency/${user.id}`),
@@ -666,12 +675,13 @@ export default function App() {
       ]);
       if (libRes.ok) setLibrary(await libRes.json());
       if (planRes.ok) setMyPlans(await planRes.json());
+      if (programsRes.ok) setWorkoutPrograms(await programsRes.json());
       if (templatesRes.ok) setWorkoutTemplates(await templatesRes.json());
       if (weightRes.ok) setWeightHistory(await weightRes.json());
       if (freqRes.ok) setFrequency(await freqRes.json());
       if (volRes.ok) setVolumeHistory(await volRes.json());
       if (lastRes.ok) setLastLogs(await lastRes.json());
-      if (![libRes, planRes, templatesRes, weightRes, freqRes, volRes, lastRes].every(res => res.ok)) {
+      if (![libRes, planRes, programsRes, templatesRes, weightRes, freqRes, volRes, lastRes].every(res => res.ok)) {
         setDataError('Alguns dados não carregaram. Tente atualizar.');
       }
     } catch (e) {
@@ -1128,10 +1138,16 @@ export default function App() {
 
       if (res.ok) {
         const plans = data?.plans || [];
+        if (data?.program) {
+          setWorkoutPrograms(prev => [
+            { ...data.program, isActive: true, exercicios: plans.length },
+            ...prev.map(program => ({ ...program, isActive: false }))
+          ]);
+        }
         setMyPlans(plans);
         if (plans[0]?.ficha) setFichaAtiva(plans[0].ficha);
         setIsLibraryOpen(false);
-        showToast(`${template.nome} aplicado ao seu plano.`, 'success');
+        showToast(`${template.nome} salvo e ativado.`, 'success');
         fetchData();
       } else {
         showToast(data?.error || 'Não foi possível aplicar o template.', 'error');
@@ -1140,6 +1156,35 @@ export default function App() {
       showToast('Não foi possível aplicar o template.', 'error');
     } finally {
       setApplyingTemplateId('');
+    }
+  };
+
+  const handleActivateProgram = async (program: any) => {
+    if (program.isActive || activatingProgramId) return;
+
+    setActivatingProgramId(program.id);
+    try {
+      const res = await authFetch(`/programs/${program.id}/activate`, {
+        method: 'POST'
+      });
+      const data = await res.json().catch(() => null);
+
+      if (res.ok) {
+        const plans = data?.plans || [];
+        setWorkoutPrograms(prev => prev.map(item => ({
+          ...item,
+          isActive: item.id === program.id
+        })));
+        setMyPlans(plans);
+        if (plans[0]?.ficha) setFichaAtiva(plans[0].ficha);
+        showToast(`${program.nome} ativado.`, 'success');
+      } else {
+        showToast(data?.error || 'Não foi possível ativar o plano.', 'error');
+      }
+    } catch (e) {
+      showToast('Não foi possível ativar o plano.', 'error');
+    } finally {
+      setActivatingProgramId('');
     }
   };
 
@@ -1461,6 +1506,15 @@ export default function App() {
   const fichaOptions = myPlans.length
     ? Array.from(new Set(myPlans.map(plan => plan.ficha))).filter(Boolean)
     : ['A', 'B', 'C'];
+  const activeProgram = workoutPrograms.find(program => program.isActive);
+  const templateObjectives = ['Todos', ...Array.from(new Set(workoutTemplates.map(template => template.objetivo).filter(Boolean)))];
+  const templateDivisions = ['Todos', ...Array.from(new Set(workoutTemplates.map(template => template.divisao).filter(Boolean)))];
+  const templateFrequencies = ['Todos', ...Array.from(new Set(workoutTemplates.map(template => template.frequencia).filter(Boolean)))];
+  const filteredTemplates = workoutTemplates.filter(template =>
+    (templateObjectiveFilter === 'Todos' || template.objetivo === templateObjectiveFilter) &&
+    (templateDivisionFilter === 'Todos' || template.divisao === templateDivisionFilter) &&
+    (templateFrequencyFilter === 'Todos' || template.frequencia === templateFrequencyFilter)
+  );
   const totalSeriesPlanejadas = exerciciosAtuais.reduce((acc, plan) => acc + (plan.seriesAlvo || 3), 0);
   const totalSeriesFeitas = currentLogs.length;
   const navItems = [
@@ -1860,16 +1914,74 @@ export default function App() {
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Templates prontos</h3>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-600">Substitui plano atual</span>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Meus planos</h3>
+                  {activeProgram && <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Ativo: {activeProgram.nome}</span>}
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-                  {workoutTemplates.length > 0 ? workoutTemplates.map(template => (
-                    <div key={template.id} className="min-w-[260px] rounded-2xl border border-gray-800 bg-gray-900 p-4">
+                  {workoutPrograms.length > 0 ? workoutPrograms.map(program => (
+                    <div key={program.id} className={`min-w-[220px] rounded-2xl border p-4 ${program.isActive ? 'border-blue-500 bg-blue-950/20' : 'border-gray-800 bg-gray-900'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-black text-white">{program.nome}</p>
+                          <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">{program.frequencia || 'Frequência livre'}</p>
+                        </div>
+                        {program.isActive && <span className="rounded-full bg-blue-600 px-2 py-1 text-[10px] font-black uppercase text-white">Ativo</span>}
+                      </div>
+                      <p className="mt-3 text-xs text-gray-400">{program.exercicios || 0} exercícios · {program.divisao || 'Divisão livre'}</p>
+                      <button
+                        disabled={program.isActive || !!activatingProgramId}
+                        onClick={() => handleActivateProgram(program)}
+                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-700 bg-gray-950 py-3 text-xs font-black uppercase tracking-wider text-gray-300 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {activatingProgramId === program.id ? <LoadingIcon size={14} /> : <CheckCircle2 size={14} />}
+                        {program.isActive ? 'Em uso' : 'Ativar'}
+                      </button>
+                    </div>
+                  )) : (
+                    <div className="w-full rounded-2xl border border-dashed border-gray-800 bg-gray-900/50 p-6 text-center text-sm text-gray-500">
+                      Seus planos salvos aparecerão aqui.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Templates prontos</h3>
+                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">
+                    <SlidersHorizontal size={12} />
+                    Filtros
+                  </span>
+                </div>
+                <div className="space-y-2 rounded-2xl border border-gray-800 bg-gray-900 p-3">
+                  {[
+                    { label: 'Objetivo', value: templateObjectiveFilter, setter: setTemplateObjectiveFilter, options: templateObjectives },
+                    { label: 'Divisão', value: templateDivisionFilter, setter: setTemplateDivisionFilter, options: templateDivisions },
+                    { label: 'Frequência', value: templateFrequencyFilter, setter: setTemplateFrequencyFilter, options: templateFrequencies }
+                  ].map(filter => (
+                    <div key={filter.label}>
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">{filter.label}</p>
+                      <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                        {filter.options.map(option => (
+                          <button
+                            key={option}
+                            onClick={() => filter.setter(option)}
+                            className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-colors ${filter.value === option ? 'bg-blue-600 text-white' : 'bg-gray-950 text-gray-500 hover:text-white'}`}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+                  {filteredTemplates.length > 0 ? filteredTemplates.map(template => (
+                    <div key={template.id} className="min-w-[300px] rounded-2xl border border-gray-800 bg-gray-900 p-4">
                       <div className="mb-3 flex items-start justify-between gap-3">
                         <div>
                           <p className="text-base font-black text-white">{template.nome}</p>
-                          <p className="mt-1 text-xs font-bold uppercase tracking-widest text-blue-400">{template.frequencia}</p>
+                          <p className="mt-1 text-xs font-bold uppercase tracking-widest text-blue-400">{template.objetivo} · {template.frequencia}</p>
                         </div>
                         <span className="rounded-full border border-gray-700 bg-gray-950 px-2 py-1 text-[10px] font-bold uppercase text-gray-400">
                           {template.nivel}
@@ -1879,10 +1991,34 @@ export default function App() {
                       <div className="mt-4 flex flex-wrap gap-2">
                         {template.dias?.map((dia: any) => (
                           <span key={dia.nome} className="rounded-full bg-gray-950 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                            {dia.nome} · {dia.exercicios}
+                            {dia.nome} · {dia.exercicios?.length || 0}
                           </span>
                         ))}
                       </div>
+                      {previewTemplateId === template.id && (
+                        <div className="mt-4 space-y-3 rounded-2xl border border-gray-800 bg-gray-950 p-3">
+                          {template.dias?.map((dia: any) => (
+                            <div key={dia.nome}>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">{dia.nome}</p>
+                              <div className="mt-2 space-y-1">
+                                {dia.exercicios?.map((ex: any) => (
+                                  <div key={`${dia.nome}-${ex.nome}`} className="flex items-center justify-between gap-3 text-xs text-gray-400">
+                                    <span className="truncate">{ex.nome}</span>
+                                    <span className="shrink-0 font-bold text-gray-500">{ex.seriesAlvo} séries</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setPreviewTemplateId(previewTemplateId === template.id ? '' : template.id)}
+                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-700 bg-gray-950 py-3 text-xs font-black uppercase tracking-wider text-gray-300 transition-colors hover:text-white"
+                      >
+                        <Eye size={15} />
+                        {previewTemplateId === template.id ? 'Ocultar exercícios' : 'Ver exercícios'}
+                      </button>
                       <button
                         disabled={!!applyingTemplateId}
                         onClick={() => handleApplyTemplate(template)}
@@ -1894,7 +2030,7 @@ export default function App() {
                     </div>
                   )) : (
                     <div className="w-full rounded-2xl border border-dashed border-gray-800 bg-gray-900/50 p-6 text-center text-sm text-gray-500">
-                      Templates serão exibidos quando o servidor carregar.
+                      Nenhum template encontrado com estes filtros.
                     </div>
                   )}
                 </div>

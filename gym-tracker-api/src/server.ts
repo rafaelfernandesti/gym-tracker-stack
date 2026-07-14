@@ -140,11 +140,62 @@ const normalizeExerciseName = (value: string) => value
     .toLowerCase()
     .trim();
 
+const ensureActiveProgram = async (userId: string) => {
+    const activeProgram = await prisma.workoutProgram.findFirst({
+        where: { userId, isActive: true }
+    });
+    if (activeProgram) return activeProgram;
+
+    const orphanPlans = await prisma.workoutPlan.count({
+        where: { userId, programId: null }
+    });
+
+    if (orphanPlans > 0) {
+        const program = await prisma.workoutProgram.create({
+            data: {
+                userId,
+                nome: 'Plano atual',
+                isActive: true
+            }
+        });
+        await prisma.workoutPlan.updateMany({
+            where: { userId, programId: null },
+            data: { programId: program.id }
+        });
+        return program;
+    }
+
+    const latestProgram = await prisma.workoutProgram.findFirst({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' }
+    });
+
+    if (latestProgram) {
+        await prisma.workoutProgram.updateMany({
+            where: { userId },
+            data: { isActive: false }
+        });
+        return prisma.workoutProgram.update({
+            where: { id: latestProgram.id },
+            data: { isActive: true }
+        });
+    }
+
+    return prisma.workoutProgram.create({
+        data: {
+            userId,
+            nome: 'Plano atual',
+            isActive: true
+        }
+    });
+};
+
 const workoutTemplates = [
     {
         id: 'full-body-3x',
         nome: 'Full Body 3x',
-        objetivo: 'Geral',
+        objetivo: 'Iniciante',
+        divisao: 'Full Body',
         nivel: 'Iniciante',
         frequencia: '3x/semana',
         descricao: 'Plano simples para treinar o corpo todo com boa frequência semanal.',
@@ -185,6 +236,7 @@ const workoutTemplates = [
         id: 'abc-geral',
         nome: 'ABC Geral',
         objetivo: 'Hipertrofia',
+        divisao: 'ABC',
         nivel: 'Intermediário',
         frequencia: '3-6x/semana',
         descricao: 'Divisão clássica para peito/tríceps, costas/bíceps e pernas/ombros.',
@@ -224,7 +276,8 @@ const workoutTemplates = [
     {
         id: 'ppl',
         nome: 'Push Pull Legs',
-        objetivo: 'Geral',
+        objetivo: 'Hipertrofia',
+        divisao: 'Push/Pull/Legs',
         nivel: 'Intermediário',
         frequencia: '3-6x/semana',
         descricao: 'Divisão eficiente para empurrar, puxar e pernas.',
@@ -261,7 +314,8 @@ const workoutTemplates = [
     {
         id: 'superior-inferior',
         nome: 'Superior / Inferior',
-        objetivo: 'Geral',
+        objetivo: 'Força',
+        divisao: 'Superior/Inferior',
         nivel: 'Básico ao avançado',
         frequencia: '4x/semana',
         descricao: 'Alternância direta para evoluir mantendo descanso organizado.',
@@ -302,6 +356,315 @@ const workoutTemplates = [
                     { nome: 'Afundo / Passada', seriesAlvo: 3 },
                     { nome: 'Cadeira Extensora', seriesAlvo: 3 },
                     { nome: 'Panturrilha no Leg Press', seriesAlvo: 4 }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'iniciante-full-body-2x',
+        nome: 'Iniciante Full Body 2x',
+        objetivo: 'Iniciante',
+        divisao: 'Full Body',
+        nivel: 'Iniciante',
+        frequencia: '2x/semana',
+        descricao: 'Plano enxuto para criar consistência sem sobrecarregar a rotina.',
+        dias: [
+            {
+                nome: 'Corpo Todo A',
+                exercicios: [
+                    { nome: 'Leg Press 45º', seriesAlvo: 3 },
+                    { nome: 'Supino Reto (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Puxada Frontal (Aberta)', seriesAlvo: 3 },
+                    { nome: 'Elevação Lateral (Halteres)', seriesAlvo: 2 },
+                    { nome: 'Abdominal Supra (Solo)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Corpo Todo B',
+                exercicios: [
+                    { nome: 'Agachamento no Smith', seriesAlvo: 3 },
+                    { nome: 'Supino Inclinado (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Remada Baixa (Triângulo)', seriesAlvo: 3 },
+                    { nome: 'Rosca Alternada (Halteres)', seriesAlvo: 2 },
+                    { nome: 'Tríceps Pulley (Corda)', seriesAlvo: 2 }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'emagrecimento-full-body-3x',
+        nome: 'Emagrecimento Full Body 3x',
+        objetivo: 'Emagrecimento',
+        divisao: 'Full Body',
+        nivel: 'Básico ao intermediário',
+        frequencia: '3x/semana',
+        descricao: 'Treinos de corpo todo com exercícios grandes e ritmo constante.',
+        dias: [
+            {
+                nome: 'Metabólico A',
+                exercicios: [
+                    { nome: 'Agachamento Livre', seriesAlvo: 3 },
+                    { nome: 'Supino Reto (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Remada Baixa (Triângulo)', seriesAlvo: 3 },
+                    { nome: 'Prancha Isométrica', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Metabólico B',
+                exercicios: [
+                    { nome: 'Leg Press 45º', seriesAlvo: 3 },
+                    { nome: 'Puxada Frontal (Aberta)', seriesAlvo: 3 },
+                    { nome: 'Desenvolvimento (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Abdominal Infra (Elevação de Pernas)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Metabólico C',
+                exercicios: [
+                    { nome: 'Afundo / Passada', seriesAlvo: 3 },
+                    { nome: 'Flexão de Braços', seriesAlvo: 3 },
+                    { nome: 'Remada Unilateral (Serrote)', seriesAlvo: 3 },
+                    { nome: 'Roda Abdominal', seriesAlvo: 3 }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'forca-full-body-3x',
+        nome: 'Força Full Body 3x',
+        objetivo: 'Força',
+        divisao: 'Full Body',
+        nivel: 'Intermediário',
+        frequencia: '3x/semana',
+        descricao: 'Base de força com foco em movimentos compostos e progressão.',
+        dias: [
+            {
+                nome: 'Força A',
+                exercicios: [
+                    { nome: 'Agachamento Livre', seriesAlvo: 5 },
+                    { nome: 'Supino Reto (Barra)', seriesAlvo: 5 },
+                    { nome: 'Remada Curvada (Barra)', seriesAlvo: 4 }
+                ]
+            },
+            {
+                nome: 'Força B',
+                exercicios: [
+                    { nome: 'Levantamento Terra', seriesAlvo: 5 },
+                    { nome: 'Desenvolvimento (Barra)', seriesAlvo: 5 },
+                    { nome: 'Barra Fixa', seriesAlvo: 4 }
+                ]
+            },
+            {
+                nome: 'Força C',
+                exercicios: [
+                    { nome: 'Agachamento no Smith', seriesAlvo: 4 },
+                    { nome: 'Supino Inclinado (Barra)', seriesAlvo: 4 },
+                    { nome: 'Remada Cavalinho', seriesAlvo: 4 }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'hipertrofia-abcd-4x',
+        nome: 'Hipertrofia ABCD 4x',
+        objetivo: 'Hipertrofia',
+        divisao: 'ABCD',
+        nivel: 'Intermediário',
+        frequencia: '4x/semana',
+        descricao: 'Mais volume por grupo muscular para quem treina quatro vezes na semana.',
+        dias: [
+            {
+                nome: 'Peito',
+                exercicios: [
+                    { nome: 'Supino Reto (Barra)', seriesAlvo: 4 },
+                    { nome: 'Supino Inclinado (Halteres)', seriesAlvo: 4 },
+                    { nome: 'Crucifixo Inclinado', seriesAlvo: 3 },
+                    { nome: 'Crossover (Polia Alta)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Costas',
+                exercicios: [
+                    { nome: 'Puxada Frontal (Aberta)', seriesAlvo: 4 },
+                    { nome: 'Remada Curvada (Barra)', seriesAlvo: 4 },
+                    { nome: 'Remada Máquina', seriesAlvo: 3 },
+                    { nome: 'Pull Down (Corda/Barra)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Pernas',
+                exercicios: [
+                    { nome: 'Agachamento Livre', seriesAlvo: 4 },
+                    { nome: 'Leg Press 45º', seriesAlvo: 4 },
+                    { nome: 'Cadeira Extensora', seriesAlvo: 3 },
+                    { nome: 'Mesa Flexora', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Ombros e Braços',
+                exercicios: [
+                    { nome: 'Desenvolvimento (Halteres)', seriesAlvo: 4 },
+                    { nome: 'Elevação Lateral (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Rosca Direta (Barra W)', seriesAlvo: 3 },
+                    { nome: 'Tríceps Testa (Barra W)', seriesAlvo: 3 }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'condicionamento-superior-inferior-4x',
+        nome: 'Condicionamento 4x',
+        objetivo: 'Condicionamento',
+        divisao: 'Superior/Inferior',
+        nivel: 'Intermediário',
+        frequencia: '4x/semana',
+        descricao: 'Alterna superior e inferior com exercícios que mantêm ritmo e capacidade de trabalho.',
+        dias: [
+            {
+                nome: 'Superior Ritmo',
+                exercicios: [
+                    { nome: 'Supino Reto (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Puxada Frontal (Aberta)', seriesAlvo: 3 },
+                    { nome: 'Desenvolvimento (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Prancha Isométrica', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Inferior Ritmo',
+                exercicios: [
+                    { nome: 'Leg Press 45º', seriesAlvo: 3 },
+                    { nome: 'Afundo / Passada', seriesAlvo: 3 },
+                    { nome: 'Stiff', seriesAlvo: 3 },
+                    { nome: 'Panturrilha no Leg Press', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Superior Volume',
+                exercicios: [
+                    { nome: 'Remada Baixa (Triângulo)', seriesAlvo: 3 },
+                    { nome: 'Flexão de Braços', seriesAlvo: 3 },
+                    { nome: 'Elevação Lateral (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Abdominal Oblíquo (Polia/Solo)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Inferior Volume',
+                exercicios: [
+                    { nome: 'Agachamento Hack', seriesAlvo: 3 },
+                    { nome: 'Cadeira Extensora', seriesAlvo: 3 },
+                    { nome: 'Cadeira Flexora', seriesAlvo: 3 },
+                    { nome: 'Panturrilha em Pé (Máquina)', seriesAlvo: 3 }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'hipertrofia-abcde-5x',
+        nome: 'Hipertrofia 5x',
+        objetivo: 'Hipertrofia',
+        divisao: 'ABCD',
+        nivel: 'Avançado',
+        frequencia: '5x/semana',
+        descricao: 'Cinco dias para alto volume com sessões mais específicas.',
+        dias: [
+            {
+                nome: 'Peito',
+                exercicios: [
+                    { nome: 'Supino Reto (Barra)', seriesAlvo: 4 },
+                    { nome: 'Supino Inclinado (Halteres)', seriesAlvo: 4 },
+                    { nome: 'Voador (Peck Deck)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Costas',
+                exercicios: [
+                    { nome: 'Puxada Frontal (Aberta)', seriesAlvo: 4 },
+                    { nome: 'Remada Curvada (Barra)', seriesAlvo: 4 },
+                    { nome: 'Pull Down (Corda/Barra)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Pernas',
+                exercicios: [
+                    { nome: 'Agachamento Livre', seriesAlvo: 4 },
+                    { nome: 'Leg Press 45º', seriesAlvo: 4 },
+                    { nome: 'Mesa Flexora', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Ombros',
+                exercicios: [
+                    { nome: 'Desenvolvimento (Halteres)', seriesAlvo: 4 },
+                    { nome: 'Elevação Lateral (Halteres)', seriesAlvo: 4 },
+                    { nome: 'Crucifixo Inverso (Halter/Cabo)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Braços e Core',
+                exercicios: [
+                    { nome: 'Rosca Direta (Barra W)', seriesAlvo: 3 },
+                    { nome: 'Tríceps Pulley (Corda)', seriesAlvo: 3 },
+                    { nome: 'Abdominal Máquina', seriesAlvo: 3 }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'ppl-6x',
+        nome: 'Push Pull Legs 6x',
+        objetivo: 'Hipertrofia',
+        divisao: 'Push/Pull/Legs',
+        nivel: 'Avançado',
+        frequencia: '6x/semana',
+        descricao: 'Alta frequência para repetir Push/Pull/Legs duas vezes por semana.',
+        dias: [
+            {
+                nome: 'Push A',
+                exercicios: [
+                    { nome: 'Supino Reto (Barra)', seriesAlvo: 4 },
+                    { nome: 'Supino Inclinado (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Desenvolvimento (Halteres)', seriesAlvo: 3 },
+                    { nome: 'Tríceps Pulley (Corda)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Pull A',
+                exercicios: [
+                    { nome: 'Puxada Frontal (Aberta)', seriesAlvo: 4 },
+                    { nome: 'Remada Curvada (Barra)', seriesAlvo: 3 },
+                    { nome: 'Rosca Direta (Barra Reta)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Legs A',
+                exercicios: [
+                    { nome: 'Agachamento Livre', seriesAlvo: 4 },
+                    { nome: 'Leg Press 45º', seriesAlvo: 3 },
+                    { nome: 'Mesa Flexora', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Push B',
+                exercicios: [
+                    { nome: 'Supino Inclinado (Barra)', seriesAlvo: 4 },
+                    { nome: 'Elevação Lateral (Polia)', seriesAlvo: 3 },
+                    { nome: 'Tríceps Testa (Barra W)', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Pull B',
+                exercicios: [
+                    { nome: 'Barra Fixa', seriesAlvo: 3 },
+                    { nome: 'Remada Baixa (Triângulo)', seriesAlvo: 4 },
+                    { nome: 'Rosca Martelo', seriesAlvo: 3 }
+                ]
+            },
+            {
+                nome: 'Legs B',
+                exercicios: [
+                    { nome: 'Stiff', seriesAlvo: 4 },
+                    { nome: 'Cadeira Extensora', seriesAlvo: 3 },
+                    { nome: 'Panturrilha Sentado (Banco)', seriesAlvo: 4 }
                 ]
             }
         ]
@@ -661,6 +1024,7 @@ app.delete('/users/:id', async (req: AuthRequest, res) => {
             prisma.workoutLog.deleteMany({ where: { userId: req.userId } }),
             prisma.workoutSession.deleteMany({ where: { userId: req.userId } }),
             prisma.workoutPlan.deleteMany({ where: { userId: req.userId } }),
+            prisma.workoutProgram.deleteMany({ where: { userId: req.userId } }),
             prisma.weightLog.deleteMany({ where: { userId: req.userId } }),
             prisma.passwordResetToken.deleteMany({ where: { userId: req.userId } }),
             prisma.exercise.deleteMany({ where: { userId: req.userId } }),
@@ -674,17 +1038,86 @@ app.delete('/users/:id', async (req: AuthRequest, res) => {
     }
 });
 
+app.get('/programs', async (req: AuthRequest, res) => {
+    try {
+        await ensureActiveProgram(req.userId!);
+        const programs = await prisma.workoutProgram.findMany({
+            where: { userId: req.userId },
+            include: { _count: { select: { plans: true } } },
+            orderBy: [
+                { isActive: 'desc' },
+                { updatedAt: 'desc' }
+            ]
+        });
+
+        res.json(programs.map(program => ({
+            id: program.id,
+            nome: program.nome,
+            templateId: program.templateId,
+            objetivo: program.objetivo,
+            divisao: program.divisao,
+            frequencia: program.frequencia,
+            isActive: program.isActive,
+            exercicios: program._count.plans,
+            createdAt: program.createdAt,
+            updatedAt: program.updatedAt
+        })));
+    } catch (error) {
+        console.error('Erro ao buscar planos salvos:', error);
+        res.status(500).json({ error: 'Erro ao buscar planos salvos.' });
+    }
+});
+
+app.post('/programs/:id/activate', async (req: AuthRequest, res) => {
+    const programId = routeParam(req.params.id);
+    if (!programId) return res.status(400).json({ error: 'Plano inválido.' });
+
+    try {
+        const program = await prisma.workoutProgram.findFirst({
+            where: { id: programId, userId: req.userId }
+        });
+        if (!program) return res.status(404).json({ error: 'Plano não encontrado.' });
+
+        await prisma.$transaction([
+            prisma.workoutProgram.updateMany({
+                where: { userId: req.userId },
+                data: { isActive: false }
+            }),
+            prisma.workoutProgram.update({
+                where: { id: program.id },
+                data: { isActive: true }
+            })
+        ]);
+
+        const plans = await prisma.workoutPlan.findMany({
+            where: { userId: req.userId, programId: program.id },
+            include: { exercise: true },
+            orderBy: { ordem: 'asc' }
+        });
+
+        res.json({
+            message: 'Plano ativado.',
+            program: { ...program, isActive: true },
+            plans
+        });
+    } catch (error) {
+        console.error('Erro ao ativar plano:', error);
+        res.status(500).json({ error: 'Erro ao ativar plano.' });
+    }
+});
+
 app.get('/templates', async (_req: AuthRequest, res) => {
     res.json(workoutTemplates.map(template => ({
         id: template.id,
         nome: template.nome,
         objetivo: template.objetivo,
+        divisao: template.divisao,
         nivel: template.nivel,
         frequencia: template.frequencia,
         descricao: template.descricao,
         dias: template.dias.map(dia => ({
             nome: dia.nome,
-            exercicios: dia.exercicios.length
+            exercicios: dia.exercicios
         }))
     })));
 });
@@ -713,23 +1146,44 @@ app.post('/templates/:id/apply', async (req: AuthRequest, res) => {
             }
         }
 
-        const createOperations = template.dias.flatMap(dia =>
-            dia.exercicios.map((item, index) => prisma.workoutPlan.create({
+        const result = await prisma.$transaction(async tx => {
+            await tx.workoutProgram.updateMany({
+                where: { userId: req.userId },
+                data: { isActive: false }
+            });
+
+            const program = await tx.workoutProgram.create({
                 data: {
                     userId: req.userId!,
-                    exerciseId: exerciseByName.get(normalizeExerciseName(item.nome))!.id,
-                    ficha: dia.nome,
-                    seriesAlvo: item.seriesAlvo,
-                    ordem: index
-                },
-                include: { exercise: true }
-            }))
-        );
+                    nome: template.nome,
+                    templateId: template.id,
+                    objetivo: template.objetivo,
+                    divisao: template.divisao,
+                    frequencia: template.frequencia,
+                    isActive: true
+                }
+            });
 
-        const [, ...createdPlans] = await prisma.$transaction([
-            prisma.workoutPlan.deleteMany({ where: { userId: req.userId } }),
-            ...createOperations
-        ]);
+            const createdPlans = [];
+            for (const dia of template.dias) {
+                for (const [index, item] of dia.exercicios.entries()) {
+                    const created = await tx.workoutPlan.create({
+                        data: {
+                            userId: req.userId!,
+                            programId: program.id,
+                            exerciseId: exerciseByName.get(normalizeExerciseName(item.nome))!.id,
+                            ficha: dia.nome,
+                            seriesAlvo: item.seriesAlvo,
+                            ordem: index
+                        },
+                        include: { exercise: true }
+                    });
+                    createdPlans.push(created);
+                }
+            }
+
+            return { program, plans: createdPlans };
+        });
 
         res.status(201).json({
             message: 'Template aplicado com sucesso.',
@@ -737,7 +1191,8 @@ app.post('/templates/:id/apply', async (req: AuthRequest, res) => {
                 id: template.id,
                 nome: template.nome
             },
-            plans: createdPlans
+            program: result.program,
+            plans: result.plans
         });
     } catch (error) {
         console.error('Erro ao aplicar template:', error);
@@ -749,8 +1204,9 @@ app.get('/plans/:userId', async (req: AuthRequest, res) => {
     if (!requireSameUserParam(req, res, routeParam(req.params.userId))) return;
 
     try {
+        const activeProgram = await ensureActiveProgram(req.userId!);
         const plans = await prisma.workoutPlan.findMany({
-            where: { userId: req.userId },
+            where: { userId: req.userId, programId: activeProgram.id },
             include: { exercise: true },
             orderBy: { ordem: 'asc' }
         });
@@ -821,6 +1277,7 @@ app.post('/plans', async (req: AuthRequest, res) => {
     }
 
     try {
+        const activeProgram = await ensureActiveProgram(req.userId!);
         const exercise = await prisma.exercise.findFirst({
             where: {
                 id: parsedExerciseId,
@@ -829,14 +1286,15 @@ app.post('/plans', async (req: AuthRequest, res) => {
         });
         if (!exercise) return res.status(403).json({ error: 'Exercício indisponível para este usuário.' });
 
-        const fichaNormalizada = ficha.toUpperCase();
+        const fichaNormalizada = ficha.trim();
         const ordem = await prisma.workoutPlan.count({
-            where: { userId: req.userId, ficha: fichaNormalizada }
+            where: { userId: req.userId, programId: activeProgram.id, ficha: fichaNormalizada }
         });
 
         const plan = await prisma.workoutPlan.create({
             data: {
                 userId: req.userId!,
+                programId: activeProgram.id,
                 exerciseId: parsedExerciseId,
                 ficha: fichaNormalizada,
                 ordem

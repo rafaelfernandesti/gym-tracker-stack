@@ -9,3 +9,4 @@ alter table public."Exercise" enable row level security;
 alter table public."WorkoutPlan" enable row level security;
 alter table public."WorkoutLog" enable row level security;
 alter table public."WorkoutSession" enable row level security;
+alter table public."WorkoutProgram" enable row level security;
