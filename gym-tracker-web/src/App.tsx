@@ -323,18 +323,38 @@ function ExerciseHistoryModal({ logs, exerciseName, onClose, loading }: any) {
   if (!logs && !loading) return null;
 
   const parseLogDate = (log: any) => {
-    const raw = log.startTime ?? log.data ?? log.createdAt ?? log.date ?? log.d ?? log.day ?? null;
+    const raw = log.session?.startTime ?? log.startTime ?? log.data ?? log.createdAt ?? log.date ?? log.d ?? log.day ?? null;
     const date = raw ? new Date(raw) : null;
     return date && !Number.isNaN(date.getTime()) ? date : null;
   };
 
-  const sortedLogs = Array.isArray(logs)
-    ? [...logs].sort((a, b) => {
-        const da = parseLogDate(a)?.getTime() ?? 0;
-        const db = parseLogDate(b)?.getTime() ?? 0;
-        return db - da;
-      })
-    : [];
+  const groupedSessions = Array.isArray(logs)
+    ? logs.reduce((acc: Record<string, any>, log: any) => {
+        const sessionId = log.session?.id || log.sessionId || 'no-session';
+        if (!acc[sessionId]) {
+          acc[sessionId] = {
+            sessionId,
+            session: log.session || null,
+            logs: [] as any[]
+          };
+        }
+        acc[sessionId].logs.push(log);
+        return acc;
+      }, {})
+    : {};
+
+  const sessions = Object.values(groupedSessions).map((group: any) => ({
+    ...group,
+    logs: [...group.logs].sort((a: any, b: any) => {
+      const da = parseLogDate(a)?.getTime() ?? 0;
+      const db = parseLogDate(b)?.getTime() ?? 0;
+      return db - da;
+    })
+  })).sort((a: any, b: any) => {
+    const da = parseLogDate(a.logs[0])?.getTime() ?? 0;
+    const db = parseLogDate(b.logs[0])?.getTime() ?? 0;
+    return db - da;
+  });
 
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -342,7 +362,7 @@ function ExerciseHistoryModal({ logs, exerciseName, onClose, loading }: any) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-black">Histórico — {exerciseName}</h3>
-            {sortedLogs.length > 0 && <p className="text-[12px] text-gray-400 mt-1">{sortedLogs.length} registro(s)</p>}
+            {Array.isArray(logs) && <p className="text-[12px] text-gray-400 mt-1">{logs.length} registro(s) em {sessions.length} sessão(ões)</p>}
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white">Fechar</button>
         </div>
@@ -352,23 +372,39 @@ function ExerciseHistoryModal({ logs, exerciseName, onClose, loading }: any) {
             <LoadingIcon size={20} />
           </div>
         ) : (
-          <div className="space-y-3 max-h-80 overflow-y-auto">
-            {sortedLogs.length > 0 ? sortedLogs.map((log: any, idx: number) => {
-              const date = parseLogDate(log);
-              const dateLabel = date ? date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : (log.date || log.data || '—');
-              const setLabel = log.reps ?? log.repsFeitas ?? '—';
-              const weightLabel = log.carga ?? log.weight ?? '—';
+          <div className="space-y-4 max-h-80 overflow-y-auto">
+            {sessions.length > 0 ? sessions.map((sessionGroup: any) => {
+              const sessionDate = sessionGroup.session
+                ? new Date(sessionGroup.session.startTime).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+                : 'Sem sessão';
+
               return (
-                <div key={idx} className="rounded-xl p-3 bg-gray-950 border border-gray-800">
-                  <div className="flex items-center justify-between gap-3">
+                <div key={sessionGroup.sessionId} className="rounded-3xl border border-gray-800 bg-gray-950 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-black text-sm">{dateLabel}</p>
-                      {log.observacao && <p className="text-[12px] text-gray-400 mt-1">{log.observacao}</p>}
+                      <p className="text-sm font-black text-white">{sessionDate}</p>
+                      <p className="text-[11px] uppercase tracking-widest text-gray-500">{sessionGroup.logs.length} série(s)</p>
                     </div>
-                    <div className="text-right">
-                      <p className="font-black text-white">{weightLabel} kg</p>
-                      <p className="text-[12px] text-gray-400">{setLabel} reps</p>
-                    </div>
+                    {sessionGroup.session?.endTime && (
+                      <p className="text-[11px] text-gray-400">{new Date(sessionGroup.session.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {sessionGroup.logs.map((log: any, idx: number) => {
+                      const date = parseLogDate(log);
+                      const timeLabel = date ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                      const setLabel = log.reps ?? log.repsFeitas ?? '—';
+                      const weightLabel = log.carga ?? log.weight ?? '—';
+                      return (
+                        <div key={idx} className="rounded-2xl border border-gray-800 bg-gray-900 p-3 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-bold text-white">{weightLabel} kg × {setLabel} reps</p>
+                            {timeLabel && <p className="text-[11px] text-gray-500">{timeLabel}</p>}
+                          </div>
+                          {log.observacao && <p className="text-[11px] text-gray-400">{log.observacao}</p>}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );

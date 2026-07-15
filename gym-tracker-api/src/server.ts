@@ -1353,12 +1353,23 @@ app.get('/logs/evolution/:userId/:exerciseId', async (req: AuthRequest, res) => 
                 userId: req.userId,
                 exerciseId
             },
-            orderBy: { data: 'asc' },
+            orderBy: [
+                { session: { startTime: 'asc' } },
+                { data: 'asc' }
+            ],
             select: {
                 id: true,
                 data: true,
                 carga: true,
-                repsFeitas: true
+                repsFeitas: true,
+                sessionId: true,
+                session: {
+                    select: {
+                        id: true,
+                        startTime: true,
+                        endTime: true
+                    }
+                }
             }
         });
         res.status(200).json(evolution);
