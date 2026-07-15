@@ -319,6 +319,48 @@ function ReportModal({ sessionData, allExercises, user, onClose, onShare, onDele
   );
 }
 
+function ExerciseHistoryModal({ logs, exerciseName, onClose, loading }: any) {
+  if (!logs && !loading) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-gray-900 p-6 rounded-2xl border border-gray-700 text-white shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-black">Histórico — {exerciseName}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">Fechar</button>
+        </div>
+
+        {loading ? (
+          <div className="py-10 text-center">
+            <LoadingIcon size={20} />
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {logs && logs.length > 0 ? logs.map((log: any, idx: number) => {
+              const date = new Date(log.startTime || log.data || log.createdAt || log.date || log.d || log.day || null);
+              const dateLabel = isNaN(date?.getTime?.()) ? (log.date || log.data || '—') : date.toLocaleDateString('pt-BR');
+              return (
+                <div key={idx} className="flex items-center justify-between rounded-xl p-3 bg-gray-950 border border-gray-800">
+                  <div>
+                    <p className="font-black">{dateLabel}</p>
+                    <p className="text-[12px] text-gray-400">{log.observacao || ''}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-black">{log.carga ?? log.weight ?? '—'} kg</p>
+                    <p className="text-[12px] text-gray-400">{log.reps ?? log.repsFeitas ?? '—'} reps</p>
+                  </div>
+                </div>
+              );
+            }) : (
+              <div className="text-center py-6 text-gray-400">Nenhum registro encontrado.</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- APLICATIVO ---
 export default function App() {
   const wakeLockRef = useRef<any>(null);
@@ -382,6 +424,10 @@ export default function App() {
     today.setHours(0, 0, 0, 0);
     return today;
   });
+  const [exerciseHistory, setExerciseHistory] = useState<any[] | null>(null);
+  const [isExerciseHistoryOpen, setIsExerciseHistoryOpen] = useState(false);
+  const [exerciseHistoryLoading, setExerciseHistoryLoading] = useState(false);
+  const [exerciseHistoryName, setExerciseHistoryName] = useState('');
   const [isSharingReport, setIsSharingReport] = useState(false);
   const [draggedPlanId, setDraggedPlanId] = useState<number | null>(null);
 
@@ -1398,6 +1444,29 @@ export default function App() {
     }
   };
 
+  const handleOpenExerciseHistory = async (exerciseId: number, exerciseName?: string) => {
+    if (exerciseHistoryLoading) return;
+    setExerciseHistoryLoading(true);
+    setIsExerciseHistoryOpen(true);
+    setExerciseHistoryName(exerciseName || '');
+    setExerciseHistory(null);
+    try {
+      if (!user?.id) throw new Error('No user');
+      const res = await authFetch(`/logs/exercise/${user.id}/${exerciseId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setExerciseHistory(data || []);
+      } else {
+        // fallback: filter lastLogs already loaded
+        setExerciseHistory(lastLogs.filter(l => l.exerciseId === exerciseId));
+      }
+    } catch (e) {
+      setExerciseHistory(lastLogs.filter(l => l.exerciseId === exerciseId));
+    } finally {
+      setExerciseHistoryLoading(false);
+    }
+  };
+
   const shareReport = async () => {
     const node = document.getElementById('report-card');
     if (!node) return;
@@ -1882,6 +1951,16 @@ export default function App() {
                             {addingSeries[p.exercise.id] ? <LoadingIcon size={15} /> : <Plus size={15} />}
                             {addingSeries[p.exercise.id] ? 'SALVANDO...' : 'SÉRIE'}
                           </button>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleOpenExerciseHistory(p.exercise.id, p.exercise.nome)}
+                              className="flex-1 bg-gray-900 hover:bg-gray-800 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-2 border border-gray-700"
+                            >
+                              <Eye size={14} />
+                              Histórico
+                            </button>
+                          </div>
 
                           {fantasma && (
                             <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest text-center mt-1">
@@ -2591,6 +2670,15 @@ export default function App() {
         />
       )
       }
+
+        {isExerciseHistoryOpen && (
+          <ExerciseHistoryModal
+            logs={exerciseHistory}
+            exerciseName={exerciseHistoryName}
+            loading={exerciseHistoryLoading}
+            onClose={() => { setIsExerciseHistoryOpen(false); setExerciseHistory(null); setExerciseHistoryName(''); }}
+          />
+        )}
 
       {/* NAVEGAÇÃO BOTTOM */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-md border-t border-gray-800 bg-gray-950/95 px-3 pb-4 pt-3 shadow-[0_-10px_40px_rgba(0,0,0,0.55)] backdrop-blur-md">
