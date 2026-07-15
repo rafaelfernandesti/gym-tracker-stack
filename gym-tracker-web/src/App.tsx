@@ -322,11 +322,28 @@ function ReportModal({ sessionData, allExercises, user, onClose, onShare, onDele
 function ExerciseHistoryModal({ logs, exerciseName, onClose, loading }: any) {
   if (!logs && !loading) return null;
 
+  const parseLogDate = (log: any) => {
+    const raw = log.startTime ?? log.data ?? log.createdAt ?? log.date ?? log.d ?? log.day ?? null;
+    const date = raw ? new Date(raw) : null;
+    return date && !Number.isNaN(date.getTime()) ? date : null;
+  };
+
+  const sortedLogs = Array.isArray(logs)
+    ? [...logs].sort((a, b) => {
+        const da = parseLogDate(a)?.getTime() ?? 0;
+        const db = parseLogDate(b)?.getTime() ?? 0;
+        return db - da;
+      })
+    : [];
+
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-gray-900 p-6 rounded-2xl border border-gray-700 text-white shadow-2xl">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-black">Histórico — {exerciseName}</h3>
+          <div>
+            <h3 className="text-lg font-black">Histórico — {exerciseName}</h3>
+            {sortedLogs.length > 0 && <p className="text-[12px] text-gray-400 mt-1">{sortedLogs.length} registro(s)</p>}
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white">Fechar</button>
         </div>
 
@@ -336,18 +353,22 @@ function ExerciseHistoryModal({ logs, exerciseName, onClose, loading }: any) {
           </div>
         ) : (
           <div className="space-y-3 max-h-80 overflow-y-auto">
-            {logs && logs.length > 0 ? logs.map((log: any, idx: number) => {
-              const date = new Date(log.startTime || log.data || log.createdAt || log.date || log.d || log.day || null);
-              const dateLabel = isNaN(date?.getTime?.()) ? (log.date || log.data || '—') : date.toLocaleDateString('pt-BR');
+            {sortedLogs.length > 0 ? sortedLogs.map((log: any, idx: number) => {
+              const date = parseLogDate(log);
+              const dateLabel = date ? date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : (log.date || log.data || '—');
+              const setLabel = log.reps ?? log.repsFeitas ?? '—';
+              const weightLabel = log.carga ?? log.weight ?? '—';
               return (
-                <div key={idx} className="flex items-center justify-between rounded-xl p-3 bg-gray-950 border border-gray-800">
-                  <div>
-                    <p className="font-black">{dateLabel}</p>
-                    <p className="text-[12px] text-gray-400">{log.observacao || ''}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-black">{log.carga ?? log.weight ?? '—'} kg</p>
-                    <p className="text-[12px] text-gray-400">{log.reps ?? log.repsFeitas ?? '—'} reps</p>
+                <div key={idx} className="rounded-xl p-3 bg-gray-950 border border-gray-800">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-black text-sm">{dateLabel}</p>
+                      {log.observacao && <p className="text-[12px] text-gray-400 mt-1">{log.observacao}</p>}
+                    </div>
+                    <div className="text-right">
+                      <p className="font-black text-white">{weightLabel} kg</p>
+                      <p className="text-[12px] text-gray-400">{setLabel} reps</p>
+                    </div>
                   </div>
                 </div>
               );
@@ -1452,12 +1473,21 @@ export default function App() {
     setExerciseHistory(null);
     try {
       if (!user?.id) throw new Error('No user');
-      const res = await authFetch(`/logs/exercise/${user.id}/${exerciseId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setExerciseHistory(data || []);
+
+      const tryFetch = async (path: string) => {
+        const response = await authFetch(path);
+        if (!response.ok) return null;
+        const data = await response.json();
+        return Array.isArray(data) ? data : null;
+      };
+
+      let data = await tryFetch(`/logs/evolution/${user.id}/${exerciseId}`);
+      if (!data) {
+        data = await tryFetch(`/logs/exercise/${user.id}/${exerciseId}`);
+      }
+      if (data) {
+        setExerciseHistory(data);
       } else {
-        // fallback: filter lastLogs already loaded
         setExerciseHistory(lastLogs.filter(l => l.exerciseId === exerciseId));
       }
     } catch (e) {
