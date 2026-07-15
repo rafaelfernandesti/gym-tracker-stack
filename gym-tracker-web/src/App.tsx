@@ -457,6 +457,7 @@ export default function App() {
   const [isCheckingServer, setIsCheckingServer] = useState(false);
   const [isServerWaking, setIsServerWaking] = useState(false);
   const [serverStatus, setServerStatus] = useState<'idle' | 'online' | 'slow' | 'offline'>('idle');
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [isCancellingWorkout, setIsCancellingWorkout] = useState(false);
@@ -525,6 +526,19 @@ export default function App() {
     confirmState?.resolve(value);
     setConfirmState(null);
   };
+
+  useEffect(() => {
+    const updateConnection = () => setIsOnline(navigator.onLine);
+
+    window.addEventListener('online', updateConnection);
+    window.addEventListener('offline', updateConnection);
+    updateConnection();
+
+    return () => {
+      window.removeEventListener('online', updateConnection);
+      window.removeEventListener('offline', updateConnection);
+    };
+  }, []);
 
   const handleExpiredSession = () => {
     if (hasHandledExpiredSessionRef.current) return;
@@ -1715,10 +1729,10 @@ export default function App() {
   const hasEvolutionData = volumeHistory.length > 0 || weightHistory.length > 0 || frequency.length > 0 || lastLogs.length > 0;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white pb-28 font-sans">
+    <div className="min-h-screen bg-gray-950 text-white pb-[calc(7rem+var(--safe-bottom))] font-sans">
       <ToastStack toasts={toasts} />
       <ConfirmDialog state={confirmState} onClose={closeConfirm} />
-      <header className="sticky top-0 z-30 border-b border-gray-900/80 bg-gray-950/90 px-5 py-4 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-gray-900/80 bg-gray-950/90 px-5 pb-4 pt-[calc(1rem+var(--safe-top))] backdrop-blur-md">
         <div className="mx-auto flex max-w-md justify-between items-center">
         <div className="flex items-center gap-3">
           <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-md" onError={(e) => e.currentTarget.style.display = 'none'} />
@@ -1742,6 +1756,12 @@ export default function App() {
                 {isLoadingData ? 'Atualizando' : 'Tentar'}
               </button>
             </div>
+          </div>
+        )}
+
+        {!isOnline && (
+          <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-950/25 p-3 text-xs font-bold uppercase tracking-widest text-amber-100">
+            Sem conexão. O treino atual fica neste aparelho, mas a sincronização precisa da internet.
           </div>
         )}
         {(isLoadingData || isServerWaking) && !dataError && (
@@ -1780,7 +1800,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-2 scrollbar-hide">
+                <div className="space-y-2 pr-1">
                   {exerciciosAtuais.length > 0 ? exerciciosAtuais.map(p => (
                     <div
                       key={p.id}
@@ -1824,6 +1844,7 @@ export default function App() {
                           <span className="text-[9px] text-gray-500 uppercase font-bold mb-1">Séries</span>
                           <input
                             type="number"
+                            inputMode="numeric"
                             min="1"
                             disabled={!!mutatingPlans[p.id]}
                             className="w-12 bg-gray-900 text-center text-sm font-bold py-1 rounded-lg border border-gray-700 outline-none text-white focus:border-blue-500 transition-colors"
@@ -1858,7 +1879,7 @@ export default function App() {
             ) : (
 
               <div className="space-y-6">
-                <div className="bg-gray-800 p-4 rounded-3xl border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.1)] text-center sticky top-4 z-30">
+                <div className="bg-gray-800 p-4 rounded-3xl border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.1)] text-center sticky top-[calc(0.75rem+var(--safe-top))] z-30">
                   <div className="flex justify-between items-center px-2">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
@@ -1975,15 +1996,20 @@ export default function App() {
                             <div className="flex-1 flex gap-2">
                               <input
                                 type="number"
+                                inputMode="decimal"
+                                min="0"
+                                step="0.5"
                                 placeholder="kg"
-                                className="w-full bg-gray-900 p-3 rounded-xl border border-gray-700 outline-none focus:border-blue-500 font-bold text-sm text-white text-center transition-colors"
+                                className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 font-black text-base text-white text-center transition-colors"
                                 value={cargas[p.exercise.id] || ''}
                                 onChange={e => setCargas({ ...cargas, [p.exercise.id]: e.target.value })}
                               />
                               <input
                                 type="number"
+                                inputMode="numeric"
+                                min="0"
                                 placeholder="reps"
-                                className="w-full bg-gray-900 p-3 rounded-xl border border-gray-700 outline-none focus:border-blue-500 font-bold text-sm text-white text-center transition-colors"
+                                className="w-full bg-gray-900 p-4 rounded-xl border border-gray-700 outline-none focus:border-blue-500 font-black text-base text-white text-center transition-colors"
                                 value={repsSet[p.exercise.id] || ''}
                                 onChange={e => setRepsSet({ ...repsSet, [p.exercise.id]: e.target.value })}
                               />
@@ -2041,7 +2067,7 @@ export default function App() {
                 </div>
 
                 {/* BOTÕES DE AÇÃO DO TREINO */}
-                <div className="mt-8 space-y-3">
+                <div className="sticky bottom-[calc(5.75rem+var(--safe-bottom))] z-30 mt-8 space-y-3 rounded-3xl border border-gray-800 bg-gray-950/95 p-3 shadow-[0_-14px_40px_rgba(0,0,0,0.45)] backdrop-blur-md">
                   <button disabled={isEndingWorkout || isCancellingWorkout} onClick={handleEndWorkout} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-green-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
                     {isEndingWorkout ? <LoadingIcon size={18} /> : <CheckCircle2 size={18} />}
                     {isEndingWorkout ? 'FINALIZANDO...' : 'FINALIZAR TREINO'}
@@ -2245,6 +2271,7 @@ export default function App() {
                           <span className="text-[9px] text-gray-500 uppercase font-bold mb-1">Séries</span>
                           <input
                             type="number"
+                            inputMode="numeric"
                             min="1"
                             disabled={!!mutatingPlans[p.id]}
                             className="w-12 bg-gray-900 text-center text-sm font-bold py-1 rounded-lg border border-gray-700 outline-none text-white focus:border-blue-500 transition-colors"
@@ -2398,7 +2425,7 @@ export default function App() {
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Peso Corporal</h3>
                 <form onSubmit={handleRegistrarPeso} className="flex gap-2">
-                  <input disabled={isSavingWeight} type="number" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-sm text-center disabled:opacity-60" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
+                  <input disabled={isSavingWeight} type="number" inputMode="decimal" step="0.1" placeholder="Ex: 85.5" className="w-24 bg-gray-900 p-2 rounded-lg border border-gray-700 outline-none text-base text-center disabled:opacity-60" value={novoPeso} onChange={e => setNovoPeso(e.target.value)} />
                   <button disabled={isSavingWeight || !novoPeso} className="bg-blue-600 px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed">
                     {isSavingWeight ? <LoadingIcon size={14} /> : '+'}
                   </button>
@@ -2641,7 +2668,7 @@ export default function App() {
               <button onClick={() => setLibTab('custom')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors ${libTab === 'custom' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Meus Exercícios</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-20">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-[calc(5rem+var(--safe-bottom))]">
               {libTab === 'global' ? (
                 ['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'].map(grupo => (
                   <div key={grupo}>
@@ -2747,7 +2774,7 @@ export default function App() {
         )}
 
       {/* NAVEGAÇÃO BOTTOM */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-md border-t border-gray-800 bg-gray-950/95 px-3 pb-4 pt-3 shadow-[0_-10px_40px_rgba(0,0,0,0.55)] backdrop-blur-md">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-md border-t border-gray-800 bg-gray-950/95 px-3 pb-[calc(1rem+var(--safe-bottom))] pt-3 shadow-[0_-10px_40px_rgba(0,0,0,0.55)] backdrop-blur-md">
         <div className="grid grid-cols-4 gap-2">
           {navItems.map(item => {
             const isActive = activeTab === item.id;
