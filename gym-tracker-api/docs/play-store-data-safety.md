@@ -14,12 +14,14 @@ Use este arquivo como base para preencher a seção "Data safety" no Google Play
 - Gerenciamento de conta.
 - Segurança, prevenção de fraude e autenticação.
 - Análise do progresso do usuário dentro do próprio app.
+- Coach de treino: gerar sugestões a partir do histórico, quando o usuário solicita.
 
 ## Compartilhamento
 
 - Não vender dados.
 - Não compartilhar dados para publicidade.
 - Dados podem ser processados por provedores de infraestrutura usados para hospedar API, banco de dados, frontend e e-mails transacionais.
+- Ao usar o coach, um recorte de treino (sem e-mail, senha ou foto) é enviado ao provedor de IA configurado no servidor.
 
 ## Segurança
 

@@ -18,6 +18,7 @@ import {
   Save,
   Share2,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
   Trophy,
   TrendingUp,
@@ -86,6 +87,15 @@ type ConfirmState = {
   tone?: 'default' | 'danger' | 'success';
   resolve: (value: boolean) => void;
 } | null;
+
+type CoachAdvice = {
+  ficha: string | null;
+  headline: string;
+  summary: string;
+  actions: string[];
+  loads: { exercise: string; note: string }[];
+  warning: string | null;
+};
 
 function ToastStack({ toasts }: { toasts: Toast[] }) {
   if (!toasts.length) return null;
@@ -488,6 +498,9 @@ export default function App() {
   const [exerciseHistoryName, setExerciseHistoryName] = useState('');
   const [isSharingReport, setIsSharingReport] = useState(false);
   const [draggedPlanId, setDraggedPlanId] = useState<number | null>(null);
+  const [coachQuestion, setCoachQuestion] = useState('');
+  const [coachAdvice, setCoachAdvice] = useState<CoachAdvice | null>(null);
+  const [isCoachLoading, setIsCoachLoading] = useState(false);
 
   // Formulários
   const [email, setEmail] = useState('');
@@ -1029,6 +1042,40 @@ export default function App() {
       showToast('Não foi possível excluir a conta.', 'error');
     } finally {
       setIsDeletingAccount(false);
+    }
+  };
+
+  const askCoach = async (presetQuestion?: string) => {
+    const question = (presetQuestion ?? coachQuestion).trim();
+    if (isCoachLoading) return;
+    if (!isOnline) {
+      showToast('O coach precisa de internet.', 'info');
+      return;
+    }
+
+    setIsCoachLoading(true);
+    try {
+      const res = await authFetch('/ai/coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          fichaAtiva,
+          inSession: Boolean(activeSession)
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(data.error || 'O coach não respondeu.', 'error');
+        return;
+      }
+
+      setCoachAdvice(data);
+      if (presetQuestion) setCoachQuestion('');
+    } catch {
+      showToast('O coach não respondeu.', 'error');
+    } finally {
+      setIsCoachLoading(false);
     }
   };
 
@@ -1789,6 +1836,81 @@ export default function App() {
                   ))}
                 </div>
 
+                <div className="rounded-2xl border border-blue-500/20 bg-gray-900 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Coach</p>
+                      <h3 className="mt-1 text-lg font-black">O que treinar hoje?</h3>
+                      <p className="mt-1 text-xs text-gray-500">Sugestão com base no seu histórico. Você confirma carga e ficha.</p>
+                    </div>
+                    <Sparkles className="shrink-0 text-blue-400" size={20} />
+                  </div>
+
+                  {coachAdvice && (
+                    <div className="space-y-3 rounded-xl border border-gray-800 bg-gray-950/70 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-black text-white">{coachAdvice.headline}</p>
+                        {coachAdvice.ficha && (
+                          <button
+                            type="button"
+                            onClick={() => setFichaAtiva(coachAdvice.ficha!)}
+                            className="shrink-0 rounded-lg bg-blue-600 px-2 py-1 text-[10px] font-black uppercase tracking-wider"
+                          >
+                            Ficha {coachAdvice.ficha}
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-300">{coachAdvice.summary}</p>
+                      {coachAdvice.actions.length > 0 && (
+                        <ul className="space-y-1 text-sm text-gray-300">
+                          {coachAdvice.actions.map(action => (
+                            <li key={action}>• {action}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {coachAdvice.loads.length > 0 && (
+                        <div className="space-y-2">
+                          {coachAdvice.loads.map(load => (
+                            <div key={`${load.exercise}-${load.note}`} className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2">
+                              <p className="text-xs font-bold text-white">{load.exercise}</p>
+                              <p className="text-xs text-gray-400">{load.note}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {coachAdvice.warning && (
+                        <p className="text-xs font-bold text-amber-300">{coachAdvice.warning}</p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <input
+                      value={coachQuestion}
+                      onChange={e => setCoachQuestion(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') askCoach(); }}
+                      placeholder="Ex: meu supino estagnou"
+                      className="min-w-0 flex-1 rounded-xl border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-white outline-none focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => askCoach()}
+                      disabled={isCoachLoading}
+                      className="rounded-xl bg-blue-600 px-3 py-3 text-xs font-black uppercase tracking-wider disabled:opacity-50"
+                    >
+                      {isCoachLoading ? <LoadingIcon size={16} /> : 'Perguntar'}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => askCoach('O que treinar hoje, considerando recuperação e o plano ativo?')}
+                    disabled={isCoachLoading}
+                    className="w-full rounded-xl border border-gray-800 py-3 text-xs font-black uppercase tracking-widest text-gray-300 hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    {isCoachLoading ? 'Consultando histórico...' : 'Sugerir treino de hoje'}
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Exercícios</p>
@@ -1903,6 +2025,25 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => askCoach(`Estou no treino da ficha ${fichaAtiva}. Dê uma dica rápida de carga e descanso para os exercícios desta ficha.`)}
+                  disabled={isCoachLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-800 bg-gray-900 py-3 text-xs font-black uppercase tracking-widest text-gray-300 disabled:opacity-50"
+                >
+                  {isCoachLoading ? <LoadingIcon size={14} /> : <Sparkles size={14} />}
+                  {isCoachLoading ? 'Coach pensando' : 'Dica do coach'}
+                </button>
+                {coachAdvice && activeSession && (
+                  <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 space-y-2">
+                    <p className="font-black">{coachAdvice.headline}</p>
+                    <p className="text-sm text-gray-300">{coachAdvice.summary}</p>
+                    {coachAdvice.loads.slice(0, 3).map(load => (
+                      <p key={`${load.exercise}-${load.note}`} className="text-xs text-gray-400"><span className="font-bold text-white">{load.exercise}:</span> {load.note}</p>
+                    ))}
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   {exerciciosAtuais.map(p => {

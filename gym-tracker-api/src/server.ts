@@ -3,6 +3,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
 import bcrypt from 'bcrypt';
+import { allowCoachRequest, buildCoachContext, isCoachConfigured, requestCoachAdvice, sanitizeCoachQuestion } from './aiCoach';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -1587,6 +1588,34 @@ app.get('/logs/last/:userId', async (req: AuthRequest, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Erro ao buscar histórico fantasma.' });
+    }
+});
+
+app.post('/ai/coach', async (req: AuthRequest, res) => {
+    const userId = req.userId!;
+    const question = sanitizeCoachQuestion(req.body?.question);
+    const fichaAtiva = typeof req.body?.fichaAtiva === 'string' ? req.body.fichaAtiva.trim().slice(0, 8) : '';
+    const inSession = Boolean(req.body?.inSession);
+
+    if (!isCoachConfigured()) {
+        return res.status(503).json({ error: 'Coach indisponível. Configure GEMINI_API_KEY ou OPENAI_API_KEY no servidor.' });
+    }
+
+    if (!allowCoachRequest(userId)) {
+        return res.status(429).json({ error: 'Limite de consultas do coach. Tente de novo em alguns minutos.' });
+    }
+
+    try {
+        const context = await buildCoachContext(prisma, userId, { question, fichaAtiva, inSession });
+        const advice = await requestCoachAdvice(context);
+        res.json(advice);
+    } catch (error) {
+        if (error instanceof Error && error.name === 'AI_NOT_CONFIGURED') {
+            return res.status(503).json({ error: 'Coach indisponível. Configure GEMINI_API_KEY ou OPENAI_API_KEY no servidor.' });
+        }
+
+        console.error('ERRO NO COACH:', error);
+        res.status(502).json({ error: 'O coach não conseguiu responder agora. Tente novamente.' });
     }
 });
 
